@@ -1,0 +1,53 @@
+buildscript {
+    ext.kotlin_version = '1.2.51'
+
+    repositories {
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+allprojects {
+    repositories {
+        mavenCentral()
+    }
+}
+
+
+project(':ast:ast-common') {
+    apply plugin: 'kotlin-platform-common'
+    dependencies {
+        compile "org.jetbrains.kotlin:kotlin-stdlib-common:$kotlin_version"
+        testCompile "org.jetbrains.kotlin:kotlin-test-annotations-common:$kotlin_version"
+        testCompile "org.jetbrains.kotlin:kotlin-test-common:$kotlin_version"
+    }
+}
+
+project(':ast:ast-jvm') {
+    apply plugin: 'kotlin-platform-jvm'
+    sourceCompatibility = '1.6'
+    compileKotlin {
+        kotlinOptions.jvmTarget = '1.6'
+    }
+    compileTestKotlin {
+        kotlinOptions.jvmTarget = '1.6'
+    }
+    dependencies {
+        expectedBy project(':ast:ast-common')
+        compile "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+        testCompile 'junit:junit:4.12'
+        testCompile "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
+        testCompile "org.jetbrains.kotlin:kotlin-test:$kotlin_version"
+    }
+    test {
+        testLogging {
+            outputs.upToDateWhen {false}
+            showStandardStreams = true
+            exceptionFormat = 'full'
+            events 'passed', 'skipped', 'failed'
+        }
+    }
+}
