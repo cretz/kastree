@@ -80,7 +80,7 @@ sealed class Node {
             val receiverType: Type?,
             val name: String,
             val paramTypeParams: List<TypeParam>,
-            val valueParams: List<Func.Param>,
+            val params: List<Func.Param>,
             val type: Type?,
             val typeConstraints: List<TypeConstraint>,
             val body: Body?
@@ -129,8 +129,9 @@ sealed class Node {
         ) : Decl(), WithModifiers
         data class Constructor(
             override val mods: List<Modifier>,
-            val args: List<Func.Param>,
-            val delegationCall: Pair<DelegationTarget, List<ValueArg>>?
+            val params: List<Func.Param>,
+            val delegationCall: Pair<DelegationTarget, List<ValueArg>>?,
+            val stmts: List<Stmt>
         ) : Decl(), WithModifiers {
             enum class DelegationTarget { THIS, SUPER }
         }

@@ -9,18 +9,19 @@ import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.idea.KotlinFileType
 import org.jetbrains.kotlin.psi.KtFile
 
-open class Parser {
-    fun parse(code: String): KtFile {
-        val disposable = Disposer.newDisposable()
-        try {
-            val env = KotlinCoreEnvironment.createForProduction(
-                disposable, CompilerConfiguration(), EnvironmentConfigFiles.JVM_CONFIG_FILES)
-            val file = LightVirtualFile("temp.kt", KotlinFileType.INSTANCE, code)
-            return PsiManager.getInstance(env.project).findFile(file) as KtFile
-        } finally {
-            disposable.dispose()
-        }
+open class Parser(val converter: Converter = Converter) {
+    protected val proj by lazy {
+        KotlinCoreEnvironment.createForProduction(
+            Disposer.newDisposable(),
+            CompilerConfiguration(),
+            EnvironmentConfigFiles.JVM_CONFIG_FILES
+        ).project
     }
+
+    fun parseFile(code: String) = converter.convertFile(parsePsiFile(code))
+
+    fun parsePsiFile(code: String) =
+        PsiManager.getInstance(proj).findFile(LightVirtualFile("temp.kt", KotlinFileType.INSTANCE, code)) as KtFile
 
     companion object : Parser() {
         init {
