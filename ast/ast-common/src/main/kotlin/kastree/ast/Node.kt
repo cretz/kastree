@@ -1,6 +1,8 @@
 package kastree.ast
 
 sealed class Node {
+    var tag: Any? = null
+
     interface WithAnnotations {
         val anns: List<Modifier.AnnotationSet>
     }
@@ -40,7 +42,7 @@ sealed class Node {
         val alias: String?
     ) : Node()
 
-    sealed class Decl {
+    sealed class Decl : Node() {
         data class Structured(
             override val mods: List<Modifier>,
             val form: Form,
@@ -59,12 +61,12 @@ sealed class Node {
             sealed class Parent : Node() {
                 data class CallConstructor(
                     val type: TypeRef.Simple,
-                    val typeArgs: List<Type>,
+                    val typeArgs: List<Node.Type>,
                     val args: List<ValueArg>,
-                    val lambda: Expr.Call.TrailLambda
+                    val lambda: Expr.Call.TrailLambda?
                 ) : Parent()
                 data class Type(
-                    val ref: TypeRef.Simple,
+                    val type: TypeRef.Simple,
                     val by: Expr?
                 ) : Parent()
             }
@@ -168,7 +170,7 @@ sealed class Node {
             val typeParams: List<Type?>
         ) : TypeRef()
         data class Nullable(val type: TypeRef) : TypeRef()
-        object Dynamic : TypeRef()
+        data class Dynamic(val _unused_: Boolean = false) : TypeRef()
     }
 
     data class Type(
@@ -254,8 +256,8 @@ sealed class Node {
             val expr: Expr
         ) : Expr()
         sealed class Lit : Expr() {
-            object True : Lit()
-            object False : Lit()
+            data class True(val _unused_: Boolean = false) : Lit()
+            data class False(val _unused_: Boolean = false) : Lit()
             data class StringTmpl(
                 val elems: List<Elem>
             ) : Lit() {
@@ -284,7 +286,7 @@ sealed class Node {
                 val digits: List<kotlin.Char>,
                 val float: Boolean
             ) : Lit()
-            object Null : Lit()
+            data class Null(val _unused_: Boolean = false) : Lit()
         }
         data class Brace(
             val params: List<Pair<String, Type?>>,
@@ -367,8 +369,8 @@ sealed class Node {
     }
 
     sealed class Stmt : Node() {
-        data class Decl(val decl: Decl) : Stmt()
-        data class Expr(val expr: Expr) : Stmt()
+        data class Decl(val decl: Node.Decl) : Stmt()
+        data class Expr(val expr: Node.Expr) : Stmt()
     }
 
     sealed class Modifier : Node() {

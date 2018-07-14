@@ -10,9 +10,11 @@ class ParserTest {
 
 //            @[ann0 ann1] internal @ann2 class Foo
 
-            enum class Foo(val temp: String) {
-                BAR("foo ${'$'}bar \u0001 \n");
-            }
+//            enum class Foo(val temp: String) {
+//                BAR("foo ${'$'}bar \u0001 \n");
+//            }
+
+            class Foo : Bar by Baz
         """.trimIndent())
         println("FILE: $file")
     }
