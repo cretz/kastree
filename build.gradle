@@ -51,3 +51,22 @@ project(':ast:ast-jvm') {
         }
     }
 }
+
+project(':ast-psi') {
+    apply plugin: 'kotlin'
+    sourceCompatibility = '1.8'
+    compileKotlin {
+        kotlinOptions.jvmTarget = '1.8'
+    }
+    compileTestKotlin {
+        kotlinOptions.jvmTarget = '1.8'
+    }
+    dependencies {
+        compile project(':ast:ast-jvm')
+        compile 'org.jetbrains.kotlin:kotlin-stdlib-jdk8'
+        compile "org.jetbrains.kotlin:kotlin-compiler:$kotlin_version"
+        testCompile 'junit:junit:4.12'
+        testCompile "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
+        testCompile "org.jetbrains.kotlin:kotlin-test:$kotlin_version"
+    }
+}

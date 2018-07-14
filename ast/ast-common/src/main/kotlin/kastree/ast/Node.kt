@@ -31,7 +31,7 @@ sealed class Node {
 
     data class Package(
         override val mods: List<Modifier>,
-        val name: String
+        val names: List<String>
     ) : Node(), WithModifiers
 
     data class Import(
