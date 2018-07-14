@@ -2,12 +2,12 @@ package kastree.ast
 
 sealed class Node {
     interface WithAnnotations {
-        val anns: List<Modifier.Annotation>
+        val anns: List<Modifier.AnnotationSet>
     }
 
     interface WithModifiers : WithAnnotations {
         val mods: List<Modifier>
-        override val anns: List<Modifier.Annotation> get() = mods.mapNotNull { it as? Modifier.Annotation }
+        override val anns: List<Modifier.AnnotationSet> get() = mods.mapNotNull { it as? Modifier.AnnotationSet }
     }
 
     interface Entry : WithAnnotations {
@@ -16,14 +16,14 @@ sealed class Node {
     }
 
     data class File(
-        override val anns: List<Modifier.Annotation>,
+        override val anns: List<Modifier.AnnotationSet>,
         override val pkg: Package?,
         override val imports: List<Import>,
         val decls: List<Decl>
     ) : Node(), Entry
 
     data class Script(
-        override val anns: List<Modifier.Annotation>,
+        override val anns: List<Modifier.AnnotationSet>,
         override val pkg: Package?,
         override val imports: List<Import>,
         val exprs: List<Expr>
@@ -47,7 +47,7 @@ sealed class Node {
             val name: String,
             val typeParams: List<TypeParam>,
             val primaryConstructor: PrimaryConstructor?,
-            val parentAnns: List<Modifier.Annotation>,
+            val parentAnns: List<Modifier.AnnotationSet>,
             val parents: List<Parent>,
             val typeConstraints: List<TypeConstraint>,
             // TODO: Can include primary constructor
@@ -61,7 +61,7 @@ sealed class Node {
                     val type: TypeRef.Simple,
                     val typeArgs: List<Type>,
                     val args: List<ValueArg>,
-                    val call: AnnotatedLambda
+                    val lambda: Expr.Call.TrailLambda
                 ) : Parent()
                 data class Type(
                     val ref: TypeRef.Simple,
@@ -73,7 +73,7 @@ sealed class Node {
                 val params: List<Func.Param>
             ) : Node(), WithModifiers
         }
-        data class Init(val stmts: List<Statement>) : Decl()
+        data class Init(val stmts: List<Stmt>) : Decl()
         data class Func(
             override val mods: List<Modifier>,
             val typeParams: List<TypeParam>,
@@ -93,7 +93,7 @@ sealed class Node {
                 val default: Expr?
             ) : Node(), WithModifiers
             sealed class Body : Node() {
-                data class Block(val stmts: List<Statement>) : Body()
+                data class Block(val stmts: List<Stmt>) : Body()
                 data class Expr(val expr: Node.Expr) : Body()
             }
         }
@@ -149,13 +149,13 @@ sealed class Node {
     ) : Node(), WithModifiers
 
     data class TypeConstraint(
-        override val anns: List<Modifier.Annotation>,
+        override val anns: List<Modifier.AnnotationSet>,
         val name: String,
         val type: Type
     ) : Node(), WithAnnotations
 
     sealed class TypeRef : Node() {
-        data class Paren(val v: TypeRef) : TypeRef()
+        data class Paren(val type: TypeRef) : TypeRef()
         data class Func(
             val receiverType: Type?,
             val params: List<Pair<String, Type>>,
@@ -166,7 +166,7 @@ sealed class Node {
             // Null means any
             val typeParams: List<Type?>
         ) : TypeRef()
-        data class Nullable(val v: TypeRef) : TypeRef()
+        data class Nullable(val type: TypeRef) : TypeRef()
         object Dynamic : TypeRef()
     }
 
@@ -181,14 +181,215 @@ sealed class Node {
         val expr: Expr
     ) : Node()
 
-    class Expr : Node()
-
-    // TODO: can't have enum
-    // TODO: include in/out
-    sealed class Modifier : Node() {
-        class Annotation : Modifier()
+    sealed class Expr : Node() {
+        data class If(
+            val expr: Expr,
+            val body: Expr,
+            val elseBody: Expr
+        ) : Expr()
+        data class Try(
+            val block: List<Stmt>,
+            val catches: List<Catch>,
+            val finallyBlock: List<Stmt>
+        ) : Expr() {
+            data class Catch(
+                override val anns: List<Modifier.AnnotationSet>,
+                val varName: String,
+                val varType: TypeRef.Simple,
+                val block: List<Stmt>
+            ) : Node(), WithAnnotations
+        }
+        data class For(
+            override val anns: List<Modifier.AnnotationSet>,
+            val vars: List<Pair<String, Type?>>,
+            val inExpr: Expr,
+            val body: Expr
+        ) : Expr(), WithAnnotations
+        data class While(
+            val expr: Expr,
+            val body: Expr,
+            val doWhile: Boolean
+        ) : Expr()
+        data class BinaryOp(
+            val lhs: Expr,
+            val op: Op,
+            val rhs: Expr
+        ) : Expr() {
+            enum class Op(val str: String) {
+                MUL("*"), DIV("/"), MOD("%"), ADD("+"), SUB("-"),
+                IN("in"), NOT_IN("!in"), IS("is"), NOT_IS("!is"),
+                GT(">"), GTE(">="), LT("<"), LTE("<="),
+                EQ("=="), NEQ("!="),
+                ASSN("="), MUL_ASSN("*="), DIV_ASSN("/="), MOD_ASSN("%="), ADD_ASSN("+="), SUB_ASSN("+="),
+                OR("||"), AND("&&"), ELVIS("?:"), RANGE(".."),
+                DOT("."), DOT_SAFE("?."), SAFE("?")
+            }
+        }
+        data class UnaryOp(
+            val expr: Expr,
+            val op: Op,
+            val prefix: Boolean
+        ) : Expr() {
+            enum class Op(val str: String) {
+                NEG("-"), POS("+"), INC("++"), DEC("--"), NOT("!"), NULL_DEREF("!!")
+            }
+        }
+        data class TypeOp(
+            val lhs: Expr,
+            val op: Op,
+            val rhs: Type
+        ) : Expr() {
+            enum class Op(val str: String) {
+                AS("as"), AS_SAFE("as?"), COL(":")
+            }
+        }
+        data class CallableRef(
+            val type: TypeRef.Simple?,
+            val qMarkCount: Int,
+            val name: String,
+            val typeArgs: List<Type>
+        ) : Expr()
+        data class Paren(
+            val expr: Expr
+        ) : Expr()
+        sealed class Lit : Expr() {
+            object True : Lit()
+            object False : Lit()
+            data class StringTmpl(
+                val elems: List<Elem>
+            ) : Lit() {
+                sealed class Elem : Node() {
+                    data class Regular(val str: String) : Elem()
+                    data class ShortTmpl(val str: String) : Elem()
+                    data class UnicodeEsc(val digits: List<kotlin.Char>) : Elem()
+                    data class RegularEsc(val char: kotlin.Char) : Elem()
+                    data class LongTmpl(val expr: Expr) : Elem()
+                }
+            }
+            data class NoEsc(
+                val str: String
+            ) : Lit()
+            data class Int(
+                val form: Form,
+                val digits: List<kotlin.Char>,
+                val long: Boolean
+            ) : Lit() {
+                enum class Form { DECIMAL, HEX, BINARY }
+            }
+            data class Char(
+                val char: kotlin.Char
+            ) : Lit()
+            data class Float(
+                val digits: List<kotlin.Char>,
+                val float: Boolean
+            ) : Lit()
+            object Null : Lit()
+        }
+        data class Brace(
+            val params: List<Pair<String, Type?>>,
+            val stmts: List<Stmt>
+        ) : Expr()
+        data class This(
+            val label: String?
+        ) : Expr()
+        data class Super(
+            val typeArg: Type?,
+            val label: String?
+        ) : Expr()
+        data class When(
+            val expr: Expr?,
+            val entries: List<Entry>
+        ) : Expr() {
+            data class Entry(
+                val conds: List<Cond>,
+                val body: Expr
+            ) : Node()
+            sealed class Cond : Node() {
+                data class Expr(val expr: Node.Expr) : Cond()
+                data class In(
+                    val expr: Node.Expr,
+                    val not: Boolean
+                ) : Cond()
+                data class Is(
+                    val type: Type,
+                    val not: Boolean
+                ) : Cond()
+            }
+        }
+        data class Object(
+            val parents: List<Decl.Structured.Parent>,
+            val members: List<Decl>
+        ) : Expr()
+        data class Throw(
+            val expr: Expr
+        ) : Expr()
+        data class Return(
+            val label: String?,
+            val expr: Expr?
+        ) : Expr()
+        data class Continue(
+            val label: String?
+        ) : Expr()
+        data class Break(
+            val label: String?
+        ) : Expr()
+        data class Coll(
+            val exprs: List<Expr>
+        ) : Expr()
+        data class Name(
+            val name: String
+        ) : Expr()
+        data class Labeled(
+            val label: String,
+            val expr: Expr
+        ) : Expr()
+        data class Annotated(
+            override val anns: List<Modifier.AnnotationSet>,
+            val expr: Expr
+        ) : Expr(), WithAnnotations
+        data class Call(
+            val expr: Expr,
+            val typeArgs: List<Type>,
+            val args: List<ValueArg>,
+            val lambda: TrailLambda?
+        ) : Expr() {
+            data class TrailLambda(
+                override val anns: List<Modifier.AnnotationSet>,
+                val label: String?,
+                val func: Brace
+            ) : Node(), WithAnnotations
+        }
+        data class ArrayAccess(
+            val expr: Expr,
+            val indices: List<Expr>
+        ) : Expr()
     }
 
-    class Statement
-    class AnnotatedLambda
+    sealed class Stmt : Node() {
+        data class Decl(val decl: Decl) : Stmt()
+        data class Expr(val expr: Expr) : Stmt()
+    }
+
+    sealed class Modifier : Node() {
+        data class AnnotationSet(
+            val target: Target?,
+            val anns: List<Annotation>
+        ) : Modifier() {
+            enum class Target {
+                FIELD, FILE, PROPERTY, GET, SET, RECEIVER, PARAM, SETPARAM, DELEGATE
+            }
+            data class Annotation(
+                val names: List<String>,
+                val typeArgs: List<Type>,
+                val args: List<ValueArg>
+            ) : Node()
+        }
+        data class Lit(val keyword: Keyword) : Modifier()
+        enum class Keyword {
+            ABSTRACT, FINAL, OPEN, ANNOTATION, SEALED, DATA, OVERRIDE, LATEINIT,
+            PRIVATE, PROTECTED, PUBLIC, INTERNAL,
+            IN, OUT, NOINLINE, CROSSINLINE, VARARG, REIFIED,
+            TAILREC, OPERATOR, INFIX, INLINE, EXTERNAL, SUSPEND, CONST
+        }
+    }
 }
