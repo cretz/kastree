@@ -10,6 +10,11 @@ open class Converter(
     // value, populate an IdentityHashMap w/ node as the key, or anything.
     val nodeMapCallback: ((Node, KtElement) -> Unit)? = null
 ) {
+    fun convertAnnotated(v: KtAnnotatedExpression) = Node.Expr.Annotated(
+        anns = v.annotations.map(::convertAnnotationSet),
+        expr = convertExpr(v.baseExpression ?: error("No annotated expr for $v"))
+    ).map(v)
+
     fun convertAnnotation(v: KtAnnotationEntry) = Node.Modifier.AnnotationSet.Annotation(
         names = v.typeReference?.names ?: error("Missing annotation name"),
         typeArgs = v.typeArguments.map(::convertType),
@@ -32,6 +37,61 @@ open class Converter(
         anns = v.entries.map(::convertAnnotation)
     ).map(v)
 
+    fun convertArrayAccess(v: KtArrayAccessExpression) = Node.Expr.ArrayAccess(
+        expr = convertExpr(v.arrayExpression ?: error("No array expr for $v")),
+        indices = v.indexExpressions.map(::convertExpr)
+    ).map(v)
+
+    fun convertBinaryOp(v: KtBinaryExpression) = Node.Expr.BinaryOp(
+        lhs = convertExpr(v.left ?: error("No binary lhs for $v")),
+        op = binaryOpsByText[v.operationReference.text] ?: error("Unable to find op ref ${v.operationReference.text}"),
+        rhs = convertExpr(v.right ?: error("No binary rhs for $v"))
+    ).map(v)
+
+    fun convertBrace(v: KtFunctionLiteral) = Node.Expr.Brace(
+        params = v.valueParameters.map {
+            (it.name ?: error("No param name")) to convertType(it.typeReference ?: error("No param type"))
+        },
+        stmts = v.bodyExpression.block.map(::convertStmt)
+    ).map(v)
+
+    fun convertBreak(v: KtBreakExpression) = Node.Expr.Break(
+        label = v.getLabelName()
+    ).map(v)
+
+    fun convertCall(v: KtCallExpression) = Node.Expr.Call(
+        expr = convertExpr(v.calleeExpression ?: error("No call expr for $v")),
+        typeArgs = v.typeArguments.map(::convertType),
+        args = convertValueArgs(v.valueArgumentList),
+        lambda = v.lambdaArguments.singleOrNull()?.let(::convertCallTrailLambda)
+    ).map(v)
+
+    fun convertCallableRef(v: KtCallableReferenceExpression): Node.Expr.CallableRef = TODO()
+
+    fun convertCallTrailLambda(v: KtLambdaArgument): Node.Expr.Call.TrailLambda {
+        var label: String? = null
+        var anns: List<Node.Modifier.AnnotationSet> = emptyList()
+        fun KtExpression.extractLambda(allowParens: Boolean = false): KtLambdaExpression? = when (this) {
+            is KtLambdaExpression -> this
+            is KtLabeledExpression -> baseExpression?.extractLambda(allowParens).also {
+                label = getLabelName()
+            }
+            is KtAnnotatedExpression -> baseExpression?.extractLambda(allowParens).also {
+                anns = annotations.map(::convertAnnotationSet)
+            }
+            is KtParenthesizedExpression -> if (allowParens) expression?.extractLambda(allowParens) else null
+            else -> null
+        }
+        val expr = v.getArgumentExpression()?.extractLambda() ?: error("No lambda for $v")
+        return Node.Expr.Call.TrailLambda(
+            anns = anns,
+            label = label,
+            func = convertBrace(expr.functionLiteral)
+        ).map(v)
+    }
+
+    fun convertColl(v: KtCollectionLiteralExpression): Node.Expr.Coll = TODO()
+
     fun convertConstructor(v: KtSecondaryConstructor) = Node.Decl.Constructor(
         mods = convertModifiers(v),
         params = v.valueParameters.map(::convertFuncParam),
@@ -42,6 +102,10 @@ open class Converter(
             target to convertValueArgs(it.valueArgumentList)
         },
         stmts = v.bodyExpression.block.map(::convertStmt)
+    ).map(v)
+
+    fun convertContinue(v: KtContinueExpression) = Node.Expr.Continue(
+        label = v.getLabelName()
     ).map(v)
 
     fun convertDecl(v: KtDeclaration): Node.Decl = when (v) {
@@ -63,8 +127,33 @@ open class Converter(
     ).map(v)
 
     fun convertExpr(v: KtExpression): Node.Expr = when (v) {
-        // TODO: a bunch more
+        is KtIfExpression -> convertIf(v)
+        is KtTryExpression -> convertTry(v)
+        is KtForExpression -> convertFor(v)
+        is KtWhileExpressionBase -> convertWhile(v)
+        is KtBinaryExpression -> convertBinaryOp(v)
+        is KtUnaryExpression -> convertUnaryOp(v)
+        is KtBinaryExpressionWithTypeRHS -> convertTypeOp(v)
+        is KtCallableReferenceExpression -> convertCallableRef(v)
+        is KtParenthesizedExpression -> convertParen(v)
+        // TODO: Boolean
         is KtStringTemplateExpression -> convertStringTmpl(v)
+        // TODO: NoEsc, Int, Char, Float, Null
+        is KtFunctionLiteral -> convertBrace(v)
+        is KtThisExpression -> convertThis(v)
+        is KtSuperExpression -> convertSuper(v)
+        is KtWhenExpression -> convertWhen(v)
+        is KtObjectLiteralExpression -> convertObject(v)
+        is KtThrowExpression -> convertThrow(v)
+        is KtReturnExpression -> convertReturn(v)
+        is KtContinueExpression -> convertContinue(v)
+        is KtBreakExpression -> convertBreak(v)
+        is KtCollectionLiteralExpression -> convertColl(v)
+        is KtSimpleNameExpression -> convertName(v)
+        is KtLabeledExpression -> convertLabeled(v)
+        is KtAnnotatedExpression -> convertAnnotated(v)
+        is KtCallExpression -> convertCall(v)
+        is KtArrayAccessExpression -> convertArrayAccess(v)
         else -> error("Unrecognized expression type from $v")
     }
 
@@ -73,6 +162,15 @@ open class Converter(
         pkg = v.packageDirective?.let(::convertPackage),
         imports = v.importDirectives.map(::convertImport),
         decls = v.declarations.map(::convertDecl)
+    ).map(v)
+
+    fun convertFor(v: KtForExpression) = Node.Expr.For(
+        anns = v.loopParameter?.annotations?.map(::convertAnnotationSet) ?: emptyList(),
+        vars = (v.loopParameter ?: error("No param on for $v")).let {
+            listOf((it.name ?: error("No name on for var for $v")) to it.typeReference?.let(::convertType))
+        },
+        inExpr = convertExpr(v.loopRange ?: error("No in range for $v")),
+        body = convertExpr(v.body ?: error("No body for $v"))
     ).map(v)
 
     fun convertFunc(v: KtNamedFunction) = Node.Decl.Func(
@@ -102,6 +200,12 @@ open class Converter(
         default = v.defaultValue?.let(::convertExpr)
     ).map(v)
 
+    fun convertIf(v: KtIfExpression) = Node.Expr.If(
+        expr = convertExpr(v.condition ?: error("No cond on if for $v")),
+        body = convertExpr(v.then ?: error("No then on if for $v")),
+        elseBody = v.`else`?.let(::convertExpr)
+    ).map(v)
+
     fun convertImport(v: KtImportDirective) = Node.Import(
         names = v.importedFqName?.pathSegments()?.map { it.asString() } ?: error("Missing import path"),
         wildcard = v.isAllUnder,
@@ -110,6 +214,11 @@ open class Converter(
 
     fun convertInit(v: KtAnonymousInitializer) = Node.Decl.Init(
         stmts = v.body.block.map(::convertStmt)
+    ).map(v)
+
+    fun convertLabeled(v: KtLabeledExpression) = Node.Expr.Labeled(
+        label = v.getLabelName() ?: error("No label name for $v"),
+        expr = convertExpr(v.baseExpression ?: error("No label expr for $v"))
     ).map(v)
 
     fun convertModifiers(v: KtModifierListOwnerStub<*>) = v.modifierList?.node?.children()?.mapNotNull { node ->
@@ -126,10 +235,23 @@ open class Converter(
         }
     }?.toList() ?: emptyList()
 
+    fun convertName(v: KtSimpleNameExpression) = Node.Expr.Name(
+        name = v.getReferencedName()
+    ).map(v)
+
+    fun convertObject(v: KtObjectLiteralExpression) = Node.Expr.Object(
+        parents = v.objectDeclaration.superTypeListEntries.map(::convertParent),
+        members = v.objectDeclaration.declarations.map(::convertDecl)
+    ).map(v)
+
     fun convertPackage(v: KtPackageDirective) = Node.Package(
         mods = convertModifiers(v),
         names = v.packageNames.map { it.getReferencedName() }
     ).map(v)
+
+    fun convertParen(v: KtParenthesizedExpression) = Node.Expr.Paren(
+        expr = convertExpr(v.expression ?: error("No paren expr for $v"))
+    )
 
     fun convertParent(v: KtSuperTypeListEntry) = when (v) {
         is KtSuperTypeCallEntry -> Node.Decl.Structured.Parent.CallConstructor(
@@ -181,6 +303,11 @@ open class Converter(
             body = v.bodyExpression?.let(::convertFuncBody)
         ).map(v)
 
+    fun convertReturn(v: KtReturnExpression) = Node.Expr.Return(
+        label = v.getLabelName(),
+        expr = v.returnedExpression?.let(::convertExpr)
+    ).map(v)
+
     fun convertStmt(v: KtExpression) =
         if (v is KtDeclaration) Node.Stmt.Decl(convertDecl(v)).map(v) else Node.Stmt.Expr(convertExpr(v)).map(v)
 
@@ -225,6 +352,33 @@ open class Converter(
         members = v.declarations.map(::convertDecl)
     ).map(v)
 
+    fun convertSuper(v: KtSuperExpression) = Node.Expr.Super(
+        typeArg = v.superTypeQualifier?.let(::convertType),
+        label = v.getLabelName()
+    ).map(v)
+
+    fun convertThis(v: KtThisExpression) = Node.Expr.This(
+        label = v.getLabelName()
+    ).map(v)
+
+    fun convertThrow(v: KtThrowExpression) = Node.Expr.Throw(
+        expr = convertExpr(v.thrownExpression ?: error("No throw expr for $v"))
+    ).map(v)
+
+    fun convertTry(v: KtTryExpression) = Node.Expr.Try(
+        stmts = v.tryBlock.block.map(::convertStmt),
+        catches = v.catchClauses.map(::convertTryCatch),
+        finallyStmts = v.finallyBlock?.finalExpression?.block?.map(::convertStmt) ?: emptyList()
+    ).map(v)
+
+    fun convertTryCatch(v: KtCatchClause) = Node.Expr.Try.Catch(
+        anns = v.catchParameter?.annotations?.map(::convertAnnotationSet) ?: emptyList(),
+        varName = v.catchParameter?.name ?: error("No catch param name for $v"),
+        varType = v.catchParameter?.typeReference?.
+            let(::convertTypeRef) as? Node.TypeRef.Simple ?: error("Invalid catch param type for $v"),
+        stmts = v.catchBody.block.map(::convertStmt)
+    ).map(v)
+
     fun convertType(v: KtTypeProjection) = convertType(v.typeReference ?: error("No reference for projection $v"))
 
     fun convertType(v: KtTypeReference): Node.Type = Node.Type(
@@ -239,6 +393,12 @@ open class Converter(
     ).map(v)
 
     fun convertTypeConstraint(v: KtTypeConstraint): Node.TypeConstraint = TODO()
+
+    fun convertTypeOp(v: KtBinaryExpressionWithTypeRHS) = Node.Expr.TypeOp(
+        lhs = convertExpr(v.left),
+        op = typeOpsByText[v.operationReference.text] ?:  error("Unable to find op ref ${v.operationReference.text}"),
+        rhs = convertType(v.right ?: error("No type op rhs for $v"))
+    ).map(v)
 
     fun convertTypeParam(v: KtTypeParameter): Node.TypeParam = TODO()
 
@@ -268,6 +428,12 @@ open class Converter(
         else -> error("Unrecognized type of $v")
     }
 
+    fun convertUnaryOp(v: KtUnaryExpression) = Node.Expr.UnaryOp(
+        expr = convertExpr(v.baseExpression ?: error("No unary expr for $v")),
+        op = unaryOpsByText[v.operationReference.text] ?:  error("Unable to find op ref ${v.operationReference.text}"),
+        prefix = v is KtPrefixExpression
+    ).map(v)
+
     fun convertValueArg(v: KtValueArgument) = Node.ValueArg(
         name = v.getArgumentName()?.asName?.asString(),
         asterisk = v.getSpreadElement() != null,
@@ -276,10 +442,44 @@ open class Converter(
 
     fun convertValueArgs(v: KtValueArgumentList?) = v?.arguments?.map(::convertValueArg) ?: emptyList()
 
+    fun convertWhen(v: KtWhenExpression) = Node.Expr.When(
+        expr = v.subjectExpression?.let(::convertExpr),
+        entries = v.entries.map(::convertWhenEntry)
+    ).map(v)
+
+    fun convertWhenCond(v: KtWhenCondition) = when (v) {
+        is KtWhenConditionWithExpression -> Node.Expr.When.Cond.Expr(
+            expr = convertExpr(v.expression ?: error("No when cond expr for $v"))
+        ).map(v)
+        is KtWhenConditionInRange -> Node.Expr.When.Cond.In(
+            expr = convertExpr(v.rangeExpression ?: error("No when in expr for $v")),
+            not = v.isNegated
+        ).map(v)
+        is KtWhenConditionIsPattern -> Node.Expr.When.Cond.Is(
+            type = convertType(v.typeReference ?: error("No when is type for $v")),
+            not = v.isNegated
+        ).map(v)
+        else -> error("Unrecognized when cond of $v")
+    }
+
+    fun convertWhenEntry(v: KtWhenEntry) = Node.Expr.When.Entry(
+        conds = v.conditions.map(::convertWhenCond),
+        body = convertExpr(v.expression ?: error("No when entry body for $v"))
+    ).map(v)
+
+    fun convertWhile(v: KtWhileExpressionBase) = Node.Expr.While(
+        expr = convertExpr(v.condition ?: error("No while cond for $v")),
+        body = convertExpr(v.body ?: error("No while body for $v")),
+        doWhile = v is KtDoWhileExpression
+    ).map(v)
+
     protected fun <T: Node> T.map(v: KtElement) = also { nodeMapCallback?.invoke(it, v) }
 
     companion object : Converter() {
         internal val modifiersByText = Node.Modifier.Keyword.values().map { it.name.toLowerCase() to it }.toMap()
+        internal val binaryOpsByText = Node.Expr.BinaryOp.Op.values().map { it.str to it }.toMap()
+        internal val unaryOpsByText = Node.Expr.UnaryOp.Op.values().map { it.str to it }.toMap()
+        internal val typeOpsByText = Node.Expr.TypeOp.Op.values().map { it.str to it }.toMap()
 
         internal val KtTypeReference.names get() = (typeElement as? KtUserType)?.names ?: emptyList()
         internal val KtUserType.names get(): List<String> =

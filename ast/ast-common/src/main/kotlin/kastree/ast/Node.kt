@@ -188,18 +188,18 @@ sealed class Node {
         data class If(
             val expr: Expr,
             val body: Expr,
-            val elseBody: Expr
+            val elseBody: Expr?
         ) : Expr()
         data class Try(
-            val block: List<Stmt>,
+            val stmts: List<Stmt>,
             val catches: List<Catch>,
-            val finallyBlock: List<Stmt>
+            val finallyStmts: List<Stmt>
         ) : Expr() {
             data class Catch(
                 override val anns: List<Modifier.AnnotationSet>,
                 val varName: String,
                 val varType: TypeRef.Simple,
-                val block: List<Stmt>
+                val stmts: List<Stmt>
             ) : Node(), WithAnnotations
         }
         data class For(
@@ -256,8 +256,7 @@ sealed class Node {
             val expr: Expr
         ) : Expr()
         sealed class Lit : Expr() {
-            data class True(val _unused_: Boolean = false) : Lit()
-            data class False(val _unused_: Boolean = false) : Lit()
+            data class Bool(val value: Boolean) : Lit()
             data class StringTmpl(
                 val elems: List<Elem>
             ) : Lit() {
