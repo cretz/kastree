@@ -161,7 +161,7 @@ sealed class Node {
         data class Paren(val type: TypeRef) : TypeRef()
         data class Func(
             val receiverType: Type?,
-            val params: List<Pair<String, Type>>,
+            val params: List<Pair<String?, Type>>,
             val type: Type
         ) : TypeRef()
         data class Simple(
@@ -215,10 +215,14 @@ sealed class Node {
         ) : Expr()
         data class BinaryOp(
             val lhs: Expr,
-            val op: Op,
+            val oper: Oper,
             val rhs: Expr
         ) : Expr() {
-            enum class Op(val str: String) {
+            sealed class Oper : Node() {
+                data class Infix(val str: String) : Oper()
+                data class Token(val token: BinaryOp.Token) : Oper()
+            }
+            enum class Token(val str: String) {
                 MUL("*"), DIV("/"), MOD("%"), ADD("+"), SUB("-"),
                 IN("in"), NOT_IN("!in"), IS("is"), NOT_IS("!is"),
                 GT(">"), GTE(">="), LT("<"), LTE("<="),
@@ -230,19 +234,21 @@ sealed class Node {
         }
         data class UnaryOp(
             val expr: Expr,
-            val op: Op,
+            val oper: Oper,
             val prefix: Boolean
         ) : Expr() {
-            enum class Op(val str: String) {
+            data class Oper(val token: Token) : Node()
+            enum class Token(val str: String) {
                 NEG("-"), POS("+"), INC("++"), DEC("--"), NOT("!"), NULL_DEREF("!!")
             }
         }
         data class TypeOp(
             val lhs: Expr,
-            val op: Op,
+            val oper: Oper,
             val rhs: Type
         ) : Expr() {
-            enum class Op(val str: String) {
+            data class Oper(val token: Token) : Node()
+            enum class Token(val str: String) {
                 AS("as"), AS_SAFE("as?"), COL(":")
             }
         }

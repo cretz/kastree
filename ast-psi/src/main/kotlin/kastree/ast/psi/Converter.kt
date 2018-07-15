@@ -45,13 +45,36 @@ open class Converter(
 
     fun convertBinaryOp(v: KtBinaryExpression) = Node.Expr.BinaryOp(
         lhs = convertExpr(v.left ?: error("No binary lhs for $v")),
-        op = binaryOpsByText[v.operationReference.text] ?: error("Unable to find op ref ${v.operationReference.text}"),
+        oper = binaryTokensByText[v.operationReference.text].let {
+            if (it != null) Node.Expr.BinaryOp.Oper.Token(it).map(v.operationReference)
+            else Node.Expr.BinaryOp.Oper.Infix(v.operationReference.text).map(v.operationReference)
+        },
         rhs = convertExpr(v.right ?: error("No binary rhs for $v"))
+    ).map(v)
+
+    fun convertBinaryOp(v: KtQualifiedExpression) = Node.Expr.BinaryOp(
+        lhs = convertExpr(v.receiverExpression),
+        oper = Node.Expr.BinaryOp.Oper.Token(
+            if (v is KtDotQualifiedExpression) Node.Expr.BinaryOp.Token.DOT else Node.Expr.BinaryOp.Token.DOT_SAFE
+        ),
+        rhs = convertExpr(v.selectorExpression ?: error("No qualified rhs for $v"))
+    ).map(v)
+
+    fun convertBrace(v: KtBlockExpression) = Node.Expr.Brace(
+        params = emptyList(),
+        stmts = v.block.map(::convertStmt)
     ).map(v)
 
     fun convertBrace(v: KtFunctionLiteral) = Node.Expr.Brace(
         params = v.valueParameters.map {
-            (it.name ?: error("No param name")) to convertType(it.typeReference ?: error("No param type"))
+            (it.name ?: error("No param name")) to it.typeReference?.let(::convertType)
+        },
+        stmts = v.bodyExpression.block.map(::convertStmt)
+    ).map(v)
+
+    fun convertBrace(v: KtLambdaExpression) = Node.Expr.Brace(
+        params = v.valueParameters.map {
+            (it.name ?: error("No param name")) to it.typeReference?.let(::convertType)
         },
         stmts = v.bodyExpression.block.map(::convertStmt)
     ).map(v)
@@ -145,13 +168,16 @@ open class Converter(
         is KtForExpression -> convertFor(v)
         is KtWhileExpressionBase -> convertWhile(v)
         is KtBinaryExpression -> convertBinaryOp(v)
+        is KtQualifiedExpression -> convertBinaryOp(v)
         is KtUnaryExpression -> convertUnaryOp(v)
         is KtBinaryExpressionWithTypeRHS -> convertTypeOp(v)
         is KtCallableReferenceExpression -> convertCallableRef(v)
         is KtParenthesizedExpression -> convertParen(v)
         is KtStringTemplateExpression -> convertStringTmpl(v)
         is KtConstantExpression -> convertConst(v)
+        is KtBlockExpression -> convertBrace(v)
         is KtFunctionLiteral -> convertBrace(v)
+        is KtLambdaExpression -> convertBrace(v)
         is KtThisExpression -> convertThis(v)
         is KtSuperExpression -> convertSuper(v)
         is KtWhenExpression -> convertWhen(v)
@@ -170,7 +196,7 @@ open class Converter(
     }
 
     fun convertFile(v: KtFile) = Node.File(
-        anns = v.fileAnnotationList?.annotations?.map(::convertAnnotationSet) ?: emptyList(),
+        anns = v.annotations.map(::convertAnnotationSet),
         pkg = v.packageDirective?.let(::convertPackage),
         imports = v.importDirectives.map(::convertImport),
         decls = v.declarations.map(::convertDecl)
@@ -406,15 +432,26 @@ open class Converter(
         type = convertType(v.getTypeReference() ?: error("No type ref for alias $v"))
     ).map(v)
 
-    fun convertTypeConstraint(v: KtTypeConstraint): Node.TypeConstraint = TODO()
+    fun convertTypeConstraint(v: KtTypeConstraint) = Node.TypeConstraint(
+        // TODO
+        anns = emptyList(),
+        name = v.subjectTypeParameterName?.getReferencedName() ?: error("No type constraint name for $v"),
+        type = convertType(v.boundTypeReference ?: error("No type constraint type for $v"))
+    ).map(v)
 
     fun convertTypeOp(v: KtBinaryExpressionWithTypeRHS) = Node.Expr.TypeOp(
         lhs = convertExpr(v.left),
-        op = typeOpsByText[v.operationReference.text] ?:  error("Unable to find op ref ${v.operationReference.text}"),
+        oper = v.operationReference.let {
+            Node.Expr.TypeOp.Oper(typeTokensByText[it.text] ?: error("Unable to find op ref $it")).map(it)
+        },
         rhs = convertType(v.right ?: error("No type op rhs for $v"))
     ).map(v)
 
-    fun convertTypeParam(v: KtTypeParameter): Node.TypeParam = TODO()
+    fun convertTypeParam(v: KtTypeParameter) = Node.TypeParam(
+        mods = convertModifiers(v),
+        name = v.name ?: error("No type param name for $v"),
+        type = v.extendsBound?.let(::convertTypeRef) as? Node.TypeRef.Simple
+    ).map(v)
 
     fun convertTypeRef(v: KtTypeReference) = convertTypeRef(v.typeElement ?: error("Missing typ elem")).let {
         if (v.hasParentheses()) Node.TypeRef.Paren(it).map(v) else it
@@ -424,7 +461,7 @@ open class Converter(
         is KtFunctionType -> Node.TypeRef.Func(
             receiverType = v.receiverTypeReference?.let(::convertType),
             params = v.parameters.map {
-                (it.name ?: error("No param name")) to convertType(it.typeReference ?: error("No param type"))
+                it.name to convertType(it.typeReference ?: error("No param type"))
             },
             type = convertType(v.returnTypeReference ?: error("No return type"))
         ).map(v)
@@ -444,7 +481,9 @@ open class Converter(
 
     fun convertUnaryOp(v: KtUnaryExpression) = Node.Expr.UnaryOp(
         expr = convertExpr(v.baseExpression ?: error("No unary expr for $v")),
-        op = unaryOpsByText[v.operationReference.text] ?:  error("Unable to find op ref ${v.operationReference.text}"),
+        oper = v.operationReference.let {
+            Node.Expr.UnaryOp.Oper(unaryTokensByText[it.text] ?: error("Unable to find op ref $it")).map(it)
+        },
         prefix = v is KtPrefixExpression
     ).map(v)
 
@@ -491,9 +530,9 @@ open class Converter(
 
     companion object : Converter() {
         internal val modifiersByText = Node.Modifier.Keyword.values().map { it.name.toLowerCase() to it }.toMap()
-        internal val binaryOpsByText = Node.Expr.BinaryOp.Op.values().map { it.str to it }.toMap()
-        internal val unaryOpsByText = Node.Expr.UnaryOp.Op.values().map { it.str to it }.toMap()
-        internal val typeOpsByText = Node.Expr.TypeOp.Op.values().map { it.str to it }.toMap()
+        internal val binaryTokensByText = Node.Expr.BinaryOp.Token.values().map { it.str to it }.toMap()
+        internal val unaryTokensByText = Node.Expr.UnaryOp.Token.values().map { it.str to it }.toMap()
+        internal val typeTokensByText = Node.Expr.TypeOp.Token.values().map { it.str to it }.toMap()
 
         internal val KtTypeReference.names get() = (typeElement as? KtUserType)?.names ?: emptyList()
         internal val KtUserType.names get(): List<String> =
