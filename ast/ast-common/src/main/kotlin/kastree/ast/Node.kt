@@ -255,37 +255,22 @@ sealed class Node {
         data class Paren(
             val expr: Expr
         ) : Expr()
-        sealed class Lit : Expr() {
-            data class Bool(val value: Boolean) : Lit()
-            data class StringTmpl(
-                val elems: List<Elem>
-            ) : Lit() {
-                sealed class Elem : Node() {
-                    data class Regular(val str: String) : Elem()
-                    data class ShortTmpl(val str: String) : Elem()
-                    data class UnicodeEsc(val digits: List<kotlin.Char>) : Elem()
-                    data class RegularEsc(val char: kotlin.Char) : Elem()
-                    data class LongTmpl(val expr: Expr) : Elem()
-                }
+        data class StringTmpl(
+            val elems: List<Elem>
+        ) : Expr() {
+            sealed class Elem : Node() {
+                data class Regular(val str: String) : Elem()
+                data class ShortTmpl(val str: String) : Elem()
+                data class UnicodeEsc(val digits: String) : Elem()
+                data class RegularEsc(val char: kotlin.Char) : Elem()
+                data class LongTmpl(val expr: Expr) : Elem()
             }
-            data class NoEsc(
-                val str: String
-            ) : Lit()
-            data class Int(
-                val form: Form,
-                val digits: List<kotlin.Char>,
-                val long: Boolean
-            ) : Lit() {
-                enum class Form { DECIMAL, HEX, BINARY }
-            }
-            data class Char(
-                val char: kotlin.Char
-            ) : Lit()
-            data class Float(
-                val digits: List<kotlin.Char>,
-                val float: Boolean
-            ) : Lit()
-            data class Null(val _unused_: Boolean = false) : Lit()
+        }
+        data class Const(
+            val value: String,
+            val form: Form
+        ) : Expr() {
+            enum class Form { BOOLEAN, CHAR, INT, FLOAT, NULL }
         }
         data class Brace(
             val params: List<Pair<String, Type?>>,

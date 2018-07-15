@@ -1,6 +1,7 @@
 package kastree.ast.psi
 
 import kastree.ast.Node
+import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.children
@@ -92,6 +93,18 @@ open class Converter(
 
     fun convertColl(v: KtCollectionLiteralExpression): Node.Expr.Coll = TODO()
 
+    fun convertConst(v: KtConstantExpression) = Node.Expr.Const(
+        value = v.text,
+        form = when (v.node.elementType) {
+            KtNodeTypes.BOOLEAN_CONSTANT -> Node.Expr.Const.Form.BOOLEAN
+            KtNodeTypes.CHARACTER_CONSTANT -> Node.Expr.Const.Form.CHAR
+            KtNodeTypes.INTEGER_CONSTANT -> Node.Expr.Const.Form.INT
+            KtNodeTypes.FLOAT_CONSTANT -> Node.Expr.Const.Form.FLOAT
+            KtNodeTypes.NULL -> Node.Expr.Const.Form.NULL
+            else -> error("Unrecognized const type for $v")
+        }
+    )
+
     fun convertConstructor(v: KtSecondaryConstructor) = Node.Decl.Constructor(
         mods = convertModifiers(v),
         params = v.valueParameters.map(::convertFuncParam),
@@ -136,9 +149,8 @@ open class Converter(
         is KtBinaryExpressionWithTypeRHS -> convertTypeOp(v)
         is KtCallableReferenceExpression -> convertCallableRef(v)
         is KtParenthesizedExpression -> convertParen(v)
-        // TODO: Boolean
         is KtStringTemplateExpression -> convertStringTmpl(v)
-        // TODO: NoEsc, Int, Char, Float, Null
+        is KtConstantExpression -> convertConst(v)
         is KtFunctionLiteral -> convertBrace(v)
         is KtThisExpression -> convertThis(v)
         is KtSuperExpression -> convertSuper(v)
@@ -311,20 +323,22 @@ open class Converter(
     fun convertStmt(v: KtExpression) =
         if (v is KtDeclaration) Node.Stmt.Decl(convertDecl(v)).map(v) else Node.Stmt.Expr(convertExpr(v)).map(v)
 
-    fun convertStringTmpl(v: KtStringTemplateExpression) = Node.Expr.Lit.StringTmpl(
+    fun convertStringTmpl(v: KtStringTemplateExpression) = Node.Expr.StringTmpl(
         elems = v.entries.map(::convertStringTmplElem)
     ).map(v)
 
     fun convertStringTmplElem(v: KtStringTemplateEntry) = when (v) {
         is KtLiteralStringTemplateEntry ->
-            Node.Expr.Lit.StringTmpl.Elem.Regular(v.text).map(v)
+            Node.Expr.StringTmpl.Elem.Regular(v.text).map(v)
         is KtSimpleNameStringTemplateEntry ->
-            Node.Expr.Lit.StringTmpl.Elem.ShortTmpl(v.expression?.text ?: error("No short tmpl text")).map(v)
+            Node.Expr.StringTmpl.Elem.ShortTmpl(v.expression?.text ?: error("No short tmpl text")).map(v)
+        is KtBlockStringTemplateEntry ->
+            Node.Expr.StringTmpl.Elem.LongTmpl(convertExpr(v.expression ?: error("No expr tmpl"))).map(v)
         is KtEscapeStringTemplateEntry ->
             if (v.text.startsWith("\\u"))
-                Node.Expr.Lit.StringTmpl.Elem.UnicodeEsc(v.text.substring(2).toCharArray().toList()).map(v)
+                Node.Expr.StringTmpl.Elem.UnicodeEsc(v.text.substring(2)).map(v)
             else
-                Node.Expr.Lit.StringTmpl.Elem.RegularEsc(v.unescapedValue.first()).map(v)
+                Node.Expr.StringTmpl.Elem.RegularEsc(v.unescapedValue.first()).map(v)
         else ->
             error("Unrecognized string template type for $v")
     }

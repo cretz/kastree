@@ -14,7 +14,12 @@ class ParserTest {
 //                BAR("foo ${'$'}bar \u0001 \n");
 //            }
 
-            class Foo : Bar by Baz
+//            class Foo : Bar by Baz
+            val temp1 = true
+            val temp2 = '5'
+            val temp3 = 123
+            val temp4 = 1.23
+            val temp5 = null
         """.trimIndent())
         println("FILE: $file")
     }
