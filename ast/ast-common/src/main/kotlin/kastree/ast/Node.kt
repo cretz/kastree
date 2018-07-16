@@ -403,7 +403,7 @@ sealed class Node {
         }
         data class Lit(val keyword: Keyword) : Modifier()
         enum class Keyword {
-            ABSTRACT, FINAL, OPEN, ANNOTATION, SEALED, DATA, OVERRIDE, LATEINIT,
+            ABSTRACT, FINAL, OPEN, ANNOTATION, SEALED, DATA, OVERRIDE, LATEINIT, INNER,
             PRIVATE, PROTECTED, PUBLIC, INTERNAL,
             IN, OUT, NOINLINE, CROSSINLINE, VARARG, REIFIED,
             TAILREC, OPERATOR, INFIX, INLINE, EXTERNAL, SUSPEND, CONST

@@ -1,5 +1,6 @@
 package kastree.ast.psi
 
+import com.intellij.psi.PsiWhiteSpace
 import kastree.ast.Node
 import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
@@ -286,8 +287,13 @@ open class Converter(
                 is KtAnnotationEntry ->
                     Node.Modifier.AnnotationSet(target = null, anns = listOf(convertAnnotation(it))).map(it)
                 is KtAnnotation -> convertAnnotationSet(it)
-                else -> modifiersByText[node.text]?.let {
-                    Node.Modifier.Lit(it).let { lit -> (node.psi as? KtElement)?.let { lit.map(it) } ?: lit }
+                is PsiWhiteSpace -> null
+                else -> when (node.text) {
+                    // We ignore some modifiers because we handle them elsewhere
+                    "enum", "companion" -> null
+                    else -> modifiersByText[node.text]?.let {
+                        Node.Modifier.Lit(it).let { lit -> (node.psi as? KtElement)?.let { lit.map(it) } ?: lit }
+                    } ?: error("Unrecognized modifier: ${node.text}")
                 }
             }
         }
@@ -480,8 +486,14 @@ open class Converter(
     ).map(v)
 
     fun convertTypeConstraint(v: KtTypeConstraint) = Node.TypeConstraint(
-        // TODO
-        anns = emptyList(),
+        anns = v.children.mapNotNull {
+            when (it) {
+                is KtAnnotationEntry ->
+                    Node.Modifier.AnnotationSet(target = null, anns = listOf(convertAnnotation(it))).map(it)
+                is KtAnnotation -> convertAnnotationSet(it)
+                else -> null
+            }
+        },
         name = v.subjectTypeParameterName?.getReferencedName() ?: error("No type constraint name for $v"),
         type = convertType(v.boundTypeReference ?: error("No type constraint type for $v"))
     ).map(v)
