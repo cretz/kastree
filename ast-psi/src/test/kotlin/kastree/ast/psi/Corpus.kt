@@ -17,9 +17,11 @@ object Corpus {
             Unit(
                 relativePath = root.relativize(it),
                 fullPath = it,
-                // See if it ends in error or if there is a .txt file of the same name that contains a "PsiErrorElement"
-                error = it.toString().endsWith("_ERR.kt") || Paths.get(it.toString().replace(".kt", ".txt")).let {
-                    Files.isRegularFile(it) && it.toFile().readText().contains("PsiErrorElement")
+                // Text files (same name w/ ext changed from kt to txt) have <whitespace>PsiElement:<error>
+                errorMessages = Paths.get(it.toString().replace(".kt", ".txt")).let {
+                    if (!Files.isRegularFile(it)) emptyList() else it.toFile().readLines().mapNotNull { line ->
+                        line.substringAfterLast("PsiErrorElement:", "").takeIf { it.isNotEmpty() }
+                    }
                 }
             )
         }
@@ -28,7 +30,7 @@ object Corpus {
     data class Unit(
         val relativePath: Path,
         val fullPath: Path,
-        val error: Boolean
+        val errorMessages: List<String>
     ) {
         override fun toString() = relativePath.toString()
     }

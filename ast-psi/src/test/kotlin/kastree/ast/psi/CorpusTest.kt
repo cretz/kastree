@@ -4,18 +4,24 @@ import com.intellij.openapi.util.text.StringUtilRt
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
+import kotlin.test.assertEquals
 
 @RunWith(Parameterized::class)
 class CorpusTest(val unit: Corpus.Unit) {
 
     @Test
     fun testParseAndConvert() {
-        val code = StringUtilRt.convertLineSeparators(unit.fullPath.toFile().readText())
-        Parser.parseFile(code)
+        try {
+            val code = StringUtilRt.convertLineSeparators(unit.fullPath.toFile().readText())
+            Parser.parseFile(code)
+        } catch (e: Parser.ParseError) {
+            if (unit.errorMessages.isEmpty()) throw e
+            assertEquals(unit.errorMessages.toSet(), e.errors.map { it.errorDescription }.toSet())
+        }
     }
 
     companion object {
         @JvmStatic @Parameterized.Parameters(name = "{0}")
-        fun data() = Corpus.default.filter { !it.error }.take(50) // TODO: all, not just 50
+        fun data() = Corpus.default.filter { it.errorMessages.isEmpty() } //Corpus.default.filter { !it.error }.take(50) // TODO: all, not just 50
     }
 }

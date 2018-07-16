@@ -66,17 +66,18 @@ open class Converter(
     ).map(v)
 
     fun convertBrace(v: KtFunctionLiteral) = Node.Expr.Brace(
-        params = v.valueParameters.map {
-            (it.name ?: error("No param name")) to it.typeReference?.let(::convertType)
-        },
+        params = v.valueParameters.map(::convertBraceParam),
         stmts = v.bodyExpression.block.map(::convertStmt)
     ).map(v)
 
     fun convertBrace(v: KtLambdaExpression) = Node.Expr.Brace(
-        params = v.valueParameters.map {
-            (it.name ?: error("No param name")) to it.typeReference?.let(::convertType)
-        },
+        params = v.valueParameters.map(::convertBraceParam),
         stmts = v.bodyExpression.block.map(::convertStmt)
+    ).map(v)
+
+    fun convertBraceParam(v: KtParameter) = Node.Expr.Brace.Param(
+        vars = convertPropertyVars(v),
+        destructType = if (v.destructuringDeclaration != null) v.typeReference?.let(::convertType) else null
     ).map(v)
 
     fun convertBreak(v: KtBreakExpression) = Node.Expr.Break(
@@ -90,7 +91,10 @@ open class Converter(
         lambda = v.lambdaArguments.singleOrNull()?.let(::convertCallTrailLambda)
     ).map(v)
 
-    fun convertCallableRef(v: KtCallableReferenceExpression): Node.Expr.CallableRef = TODO()
+    fun convertCallableRef(v: KtCallableReferenceExpression) = Node.Expr.CallableRef(
+        expr = v.receiverExpression?.let(::convertExpr),
+        name = v.callableReference.getReferencedName()
+    ).map(v)
 
     fun convertCallTrailLambda(v: KtLambdaArgument): Node.Expr.Call.TrailLambda {
         var label: String? = null
@@ -110,11 +114,17 @@ open class Converter(
         return Node.Expr.Call.TrailLambda(
             anns = anns,
             label = label,
-            func = convertBrace(expr.functionLiteral)
+            func = convertBrace(expr)
         ).map(v)
     }
 
-    fun convertColl(v: KtCollectionLiteralExpression): Node.Expr.Coll = TODO()
+    fun convertClassLit(v: KtClassLiteralExpression) = Node.Expr.ClassLit(
+        expr = v.receiverExpression?.let(::convertExpr)
+    ).map(v)
+
+    fun convertCollLit(v: KtCollectionLiteralExpression) = Node.Expr.CollLit(
+        exprs = v.getInnerExpressions().map(::convertExpr)
+    ).map(v)
 
     fun convertConst(v: KtConstantExpression) = Node.Expr.Const(
         value = v.text,
@@ -132,10 +142,12 @@ open class Converter(
         mods = convertModifiers(v),
         params = v.valueParameters.map(::convertFuncParam),
         delegationCall = if (v.hasImplicitDelegationCall()) null else v.getDelegationCall().let {
-            val target =
-                if (it.isCallToThis) Node.Decl.Constructor.DelegationTarget.THIS
-                else Node.Decl.Constructor.DelegationTarget.SUPER
-            target to convertValueArgs(it.valueArgumentList)
+            Node.Decl.Constructor.DelegationCall(
+                target =
+                    if (it.isCallToThis) Node.Decl.Constructor.DelegationTarget.THIS
+                    else Node.Decl.Constructor.DelegationTarget.SUPER,
+                args = convertValueArgs(it.valueArgumentList)
+            ).map(it)
         },
         stmts = v.bodyExpression.block.map(::convertStmt)
     ).map(v)
@@ -149,6 +161,7 @@ open class Converter(
         is KtClassOrObject -> convertStructured(v)
         is KtAnonymousInitializer -> convertInit(v)
         is KtNamedFunction -> convertFunc(v)
+        is KtDestructuringDeclaration -> convertProperty(v)
         is KtProperty -> convertProperty(v)
         is KtTypeAlias -> convertTypeAlias(v)
         is KtSecondaryConstructor -> convertConstructor(v)
@@ -172,6 +185,7 @@ open class Converter(
         is KtUnaryExpression -> convertUnaryOp(v)
         is KtBinaryExpressionWithTypeRHS -> convertTypeOp(v)
         is KtCallableReferenceExpression -> convertCallableRef(v)
+        is KtClassLiteralExpression -> convertClassLit(v)
         is KtParenthesizedExpression -> convertParen(v)
         is KtStringTemplateExpression -> convertStringTmpl(v)
         is KtConstantExpression -> convertConst(v)
@@ -186,7 +200,7 @@ open class Converter(
         is KtReturnExpression -> convertReturn(v)
         is KtContinueExpression -> convertContinue(v)
         is KtBreakExpression -> convertBreak(v)
-        is KtCollectionLiteralExpression -> convertColl(v)
+        is KtCollectionLiteralExpression -> convertCollLit(v)
         is KtSimpleNameExpression -> convertName(v)
         is KtLabeledExpression -> convertLabeled(v)
         is KtAnnotatedExpression -> convertAnnotated(v)
@@ -204,9 +218,7 @@ open class Converter(
 
     fun convertFor(v: KtForExpression) = Node.Expr.For(
         anns = v.loopParameter?.annotations?.map(::convertAnnotationSet) ?: emptyList(),
-        vars = (v.loopParameter ?: error("No param on for $v")).let {
-            listOf((it.name ?: error("No name on for var for $v")) to it.typeReference?.let(::convertType))
-        },
+        vars = convertPropertyVars(v.loopParameter ?: error("No param on for $v")),
         inExpr = convertExpr(v.loopRange ?: error("No in range for $v")),
         body = convertExpr(v.body ?: error("No body for $v"))
     ).map(v)
@@ -259,7 +271,7 @@ open class Converter(
         expr = convertExpr(v.baseExpression ?: error("No label expr for $v"))
     ).map(v)
 
-    fun convertModifiers(v: KtModifierListOwnerStub<*>) = v.modifierList?.node?.children()?.mapNotNull { node ->
+    fun convertModifiers(v: KtModifierListOwner) = v.modifierList?.node?.children()?.mapNotNull { node ->
         // We go over the node children because we want to preserve order
         node.psi.let {
             when (it) {
@@ -310,12 +322,27 @@ open class Converter(
         params = v.valueParameters.map(::convertFuncParam)
     ).map(v)
 
+    fun convertProperty(v: KtDestructuringDeclaration) = Node.Decl.Property(
+        mods = convertModifiers(v),
+        readOnly = !v.isVar,
+        typeParams = emptyList(),
+        receiverType = null,
+        vars = v.entries.map(::convertPropertyVar),
+        typeConstraints = emptyList(),
+        delegated = false,
+        expr = v.initializer?.let(::convertExpr),
+        accessors = null
+    ).map(v)
+
     fun convertProperty(v: KtProperty) = Node.Decl.Property(
         mods = convertModifiers(v),
+        readOnly = !v.isVar,
         typeParams = v.typeParameters.map(::convertTypeParam),
         receiverType = v.receiverTypeReference?.let(::convertType),
-        // TODO: how to handle multiple
-        vars = listOf((v.name ?: error("No property name")) to v.typeReference?.let(::convertType)),
+        vars = listOf(Node.Decl.Property.Var(
+            name = v.name ?: error("No property name on $v"),
+            type = v.typeReference?.let(::convertType)
+        ).map(v)),
         typeConstraints = v.typeConstraints.map(::convertTypeConstraint),
         delegated = v.hasDelegateExpression(),
         expr = v.delegateExpressionOrInitializer?.let(::convertExpr),
@@ -340,6 +367,18 @@ open class Converter(
             paramType = v.parameter?.typeReference?.let(::convertType),
             body = v.bodyExpression?.let(::convertFuncBody)
         ).map(v)
+
+    fun convertPropertyVar(v: KtDestructuringDeclarationEntry) =
+        if (v.name == "_") null else Node.Decl.Property.Var(
+            name = v.name ?: error("No property name on $v"),
+            type = v.typeReference?.let(::convertType)
+        ).map(v)
+
+    fun convertPropertyVars(v: KtParameter) =
+        v.destructuringDeclaration?.entries?.map(::convertPropertyVar) ?: listOf(Node.Decl.Property.Var(
+            name = v.name ?: error("No property name on $v"),
+            type = v.typeReference?.let(::convertType)
+        ).map(v))
 
     fun convertReturn(v: KtReturnExpression) = Node.Expr.Return(
         label = v.getLabelName(),
@@ -461,7 +500,10 @@ open class Converter(
         is KtFunctionType -> Node.TypeRef.Func(
             receiverType = v.receiverTypeReference?.let(::convertType),
             params = v.parameters.map {
-                it.name to convertType(it.typeReference ?: error("No param type"))
+                Node.TypeRef.Func.Param(
+                    name = it.name,
+                    type = convertType(it.typeReference ?: error("No param type"))
+                ).map(it)
             },
             type = convertType(v.returnTypeReference ?: error("No return type"))
         ).map(v)

@@ -101,14 +101,21 @@ sealed class Node {
         }
         data class Property(
             override val mods: List<Modifier>,
+            val readOnly: Boolean,
             val typeParams: List<TypeParam>,
             val receiverType: Type?,
-            val vars: List<Pair<String, Type?>>,
+            // Always at least one, more than one is destructuring, null is underscore in destructure
+            val vars: List<Var?>,
             val typeConstraints: List<TypeConstraint>,
             val delegated: Boolean,
             val expr: Expr?,
             val accessors: Pair<Accessor, Accessor?>?
         ) : Decl(), WithModifiers {
+            data class Var(
+                val name: String,
+                val type: Type?
+            ) : Node()
+
             sealed class Accessor : Node(), WithModifiers {
                 data class Get(
                     override val mods: List<Modifier>,
@@ -132,9 +139,13 @@ sealed class Node {
         data class Constructor(
             override val mods: List<Modifier>,
             val params: List<Func.Param>,
-            val delegationCall: Pair<DelegationTarget, List<ValueArg>>?,
+            val delegationCall: DelegationCall?,
             val stmts: List<Stmt>
         ) : Decl(), WithModifiers {
+            data class DelegationCall(
+                val target: DelegationTarget,
+                val args: List<ValueArg>
+            ) : Node()
             enum class DelegationTarget { THIS, SUPER }
         }
         data class EnumEntry(
@@ -161,9 +172,14 @@ sealed class Node {
         data class Paren(val type: TypeRef) : TypeRef()
         data class Func(
             val receiverType: Type?,
-            val params: List<Pair<String?, Type>>,
+            val params: List<Param>,
             val type: Type
-        ) : TypeRef()
+        ) : TypeRef() {
+            data class Param(
+                val name: String?,
+                val type: Type
+            ) : Node()
+        }
         data class Simple(
             val name: String,
             // Null means any
@@ -204,7 +220,8 @@ sealed class Node {
         }
         data class For(
             override val anns: List<Modifier.AnnotationSet>,
-            val vars: List<Pair<String, Type?>>,
+            // More than one means destructure, null means underscore
+            val vars: List<Decl.Property.Var?>,
             val inExpr: Expr,
             val body: Expr
         ) : Expr(), WithAnnotations
@@ -253,10 +270,11 @@ sealed class Node {
             }
         }
         data class CallableRef(
-            val type: TypeRef.Simple?,
-            val qMarkCount: Int,
-            val name: String,
-            val typeArgs: List<Type>
+            val expr: Expr?,
+            val name: String
+        ) : Expr()
+        data class ClassLit(
+            val expr: Expr?
         ) : Expr()
         data class Paren(
             val expr: Expr
@@ -279,9 +297,15 @@ sealed class Node {
             enum class Form { BOOLEAN, CHAR, INT, FLOAT, NULL }
         }
         data class Brace(
-            val params: List<Pair<String, Type?>>,
+            val params: List<Param>,
             val stmts: List<Stmt>
-        ) : Expr()
+        ) : Expr() {
+            data class Param(
+                // Multiple means destructure, null means underscore
+                val vars: List<Decl.Property.Var?>,
+                val destructType: Type?
+            ) : Expr()
+        }
         data class This(
             val label: String?
         ) : Expr()
@@ -326,7 +350,7 @@ sealed class Node {
         data class Break(
             val label: String?
         ) : Expr()
-        data class Coll(
+        data class CollLit(
             val exprs: List<Expr>
         ) : Expr()
         data class Name(
