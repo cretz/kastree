@@ -61,7 +61,7 @@ sealed class Node {
             sealed class Parent : Node() {
                 data class CallConstructor(
                     val type: TypeRef.Simple,
-                    val typeArgs: List<Node.Type>,
+                    val typeArgs: List<Node.Type?>,
                     val args: List<ValueArg>,
                     val lambda: Expr.Call.TrailLambda?
                 ) : Parent()
@@ -241,7 +241,7 @@ sealed class Node {
             }
             enum class Token(val str: String) {
                 MUL("*"), DIV("/"), MOD("%"), ADD("+"), SUB("-"),
-                IN("in"), NOT_IN("!in"), IS("is"), NOT_IS("!is"),
+                IN("in"), NOT_IN("!in"),
                 GT(">"), GTE(">="), LT("<"), LTE("<="),
                 EQ("=="), NEQ("!="),
                 ASSN("="), MUL_ASSN("*="), DIV_ASSN("/="), MOD_ASSN("%="), ADD_ASSN("+="), SUB_ASSN("+="),
@@ -266,7 +266,7 @@ sealed class Node {
         ) : Expr() {
             data class Oper(val token: Token) : Node()
             enum class Token(val str: String) {
-                AS("as"), AS_SAFE("as?"), COL(":")
+                AS("as"), AS_SAFE("as?"), COL(":"), IS("is"), NOT_IS("!is")
             }
         }
         data class CallableRef(
@@ -366,7 +366,7 @@ sealed class Node {
         ) : Expr(), WithAnnotations
         data class Call(
             val expr: Expr,
-            val typeArgs: List<Type>,
+            val typeArgs: List<Type?>,
             val args: List<ValueArg>,
             val lambda: TrailLambda?
         ) : Expr() {

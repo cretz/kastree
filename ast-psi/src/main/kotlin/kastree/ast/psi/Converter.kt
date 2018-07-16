@@ -18,7 +18,7 @@ open class Converter(
 
     fun convertAnnotation(v: KtAnnotationEntry) = Node.Modifier.AnnotationSet.Annotation(
         names = v.typeReference?.names ?: error("Missing annotation name"),
-        typeArgs = v.typeArguments.map(::convertType),
+        typeArgs = v.typeArguments.map { convertType(it) ?: error("No ann typ arg for $v") },
         args = convertValueArgs(v.valueArgumentList)
     ).map(v)
 
@@ -184,6 +184,7 @@ open class Converter(
         is KtQualifiedExpression -> convertBinaryOp(v)
         is KtUnaryExpression -> convertUnaryOp(v)
         is KtBinaryExpressionWithTypeRHS -> convertTypeOp(v)
+        is KtIsExpression -> convertTypeOp(v)
         is KtCallableReferenceExpression -> convertCallableRef(v)
         is KtClassLiteralExpression -> convertClassLit(v)
         is KtParenthesizedExpression -> convertParen(v)
@@ -206,6 +207,12 @@ open class Converter(
         is KtAnnotatedExpression -> convertAnnotated(v)
         is KtCallExpression -> convertCall(v)
         is KtArrayAccessExpression -> convertArrayAccess(v)
+        // TODO: this is for "function expressions", need to learn about them
+        is KtNamedFunction -> throw Unsupported("Function expressions not supported")
+        // TODO: this can happen when a labeled expression uses a var decl as the expression
+        is KtProperty -> throw Unsupported("Property expressions not supported")
+        // TODO: this is present in a recovery test where an interface decl is on rhs of a gt expr
+        is KtClass -> throw Unsupported("Class expressions not supported")
         else -> error("Unrecognized expression type from $v")
     }
 
@@ -228,7 +235,8 @@ open class Converter(
         typeParams =
             if (v.hasTypeParameterListBeforeFunctionName()) v.typeParameters.map(::convertTypeParam) else emptyList(),
         receiverType = v.receiverTypeReference?.let(::convertType),
-        name = v.name ?: error("No func name"),
+        // TODO: this is apparently allowed by the parser
+        name = v.name ?: throw Unsupported("Functions without names are not supported"),
         // TODO: validate
         paramTypeParams =
             if (!v.hasTypeParameterListBeforeFunctionName()) v.typeParameters.map(::convertTypeParam) else emptyList(),
@@ -246,7 +254,7 @@ open class Converter(
         mods = convertModifiers(v),
         readOnly = if (v.hasValOrVar()) !v.isMutable else null,
         name = v.name ?: error("No param name"),
-        type = convertType(v.typeReference ?: error("No param type")),
+        type = convertType(v.typeReference ?: throw Unsupported("Function parameters without types not supported")),
         default = v.defaultValue?.let(::convertExpr)
     ).map(v)
 
@@ -458,7 +466,7 @@ open class Converter(
         stmts = v.catchBody.block.map(::convertStmt)
     ).map(v)
 
-    fun convertType(v: KtTypeProjection) = convertType(v.typeReference ?: error("No reference for projection $v"))
+    fun convertType(v: KtTypeProjection) = v.typeReference?.let { convertType(it) }
 
     fun convertType(v: KtTypeReference): Node.Type = Node.Type(
         mods = convertModifiers(v),
@@ -485,6 +493,14 @@ open class Converter(
         },
         rhs = convertType(v.right ?: error("No type op rhs for $v"))
     ).map(v)
+
+    fun convertTypeOp(v: KtIsExpression) = Node.Expr.TypeOp(
+        lhs = convertExpr(v.leftHandSide),
+        oper = v.operationReference.let {
+            Node.Expr.TypeOp.Oper(typeTokensByText[it.text] ?: error("Unable to find op ref $it")).map(it)
+        },
+        rhs = convertType(v.typeReference ?: error("No type op rhs for $v"))
+    )
 
     fun convertTypeParam(v: KtTypeParameter) = Node.TypeParam(
         mods = convertModifiers(v),
@@ -569,6 +585,8 @@ open class Converter(
     ).map(v)
 
     protected fun <T: Node> T.map(v: KtElement) = also { nodeMapCallback?.invoke(it, v) }
+
+    class Unsupported(message: String) : UnsupportedOperationException(message)
 
     companion object : Converter() {
         internal val modifiersByText = Node.Modifier.Keyword.values().map { it.name.toLowerCase() to it }.toMap()

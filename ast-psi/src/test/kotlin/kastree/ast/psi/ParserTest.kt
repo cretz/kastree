@@ -12,7 +12,7 @@ class ParserTest {
 
     @Test
     fun testParser() {
-        // This is basically my test bed while developing
+        // This is basically my test bed
         val file = Parser.parseFile("""
             package whatevs
 
@@ -30,7 +30,6 @@ class ParserTest {
             val temp5 = null
 
             val temp6 = 1 and 2
-            val (temp7, temp8) = temp9
 
             fun foo() {
                 val (temp7, _, temp8) = temp9
@@ -48,6 +47,11 @@ class ParserTest {
             fun simple() {
                 this@x::foo
             }
+
+            fun foo() {
+              xyzzy<*>()
+            }
+
         """.trimIndent())
 //        println("FILE: $file")
     }

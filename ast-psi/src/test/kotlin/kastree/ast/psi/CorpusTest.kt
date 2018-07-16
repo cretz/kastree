@@ -1,6 +1,7 @@
 package kastree.ast.psi
 
 import com.intellij.openapi.util.text.StringUtilRt
+import org.junit.Assume
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
@@ -14,6 +15,8 @@ class CorpusTest(val unit: Corpus.Unit) {
         try {
             val code = StringUtilRt.convertLineSeparators(unit.fullPath.toFile().readText())
             Parser.parseFile(code)
+        } catch (e: Converter.Unsupported) {
+            Assume.assumeNoException(e.message, e)
         } catch (e: Parser.ParseError) {
             if (unit.errorMessages.isEmpty()) throw e
             assertEquals(unit.errorMessages.toSet(), e.errors.map { it.errorDescription }.toSet())
@@ -22,6 +25,6 @@ class CorpusTest(val unit: Corpus.Unit) {
 
     companion object {
         @JvmStatic @Parameterized.Parameters(name = "{0}")
-        fun data() = Corpus.default.filter { it.errorMessages.isEmpty() } //Corpus.default.filter { !it.error }.take(50) // TODO: all, not just 50
+        fun data() = Corpus.default
     }
 }
