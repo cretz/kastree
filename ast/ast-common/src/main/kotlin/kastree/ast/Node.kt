@@ -109,13 +109,16 @@ sealed class Node {
             val typeConstraints: List<TypeConstraint>,
             val delegated: Boolean,
             val expr: Expr?,
-            val accessors: Pair<Accessor, Accessor?>?
+            val accessors: Accessors?
         ) : Decl(), WithModifiers {
             data class Var(
                 val name: String,
                 val type: Type?
             ) : Node()
-
+            data class Accessors(
+                val first: Accessor,
+                val second: Accessor?
+            ) : Node()
             sealed class Accessor : Node(), WithModifiers {
                 data class Get(
                     override val mods: List<Modifier>,
@@ -286,7 +289,7 @@ sealed class Node {
                 data class Regular(val str: String) : Elem()
                 data class ShortTmpl(val str: String) : Elem()
                 data class UnicodeEsc(val digits: String) : Elem()
-                data class RegularEsc(val char: kotlin.Char) : Elem()
+                data class RegularEsc(val char: Char) : Elem()
                 data class LongTmpl(val expr: Expr) : Elem()
             }
         }

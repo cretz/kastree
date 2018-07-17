@@ -361,11 +361,10 @@ open class Converter(
         delegated = v.hasDelegateExpression(),
         expr = v.delegateExpressionOrInitializer?.let(::convertExpr),
         accessors = v.accessors.map(::convertPropertyAccessor).let {
-            when {
-                it.isEmpty() -> null
-                it.size == 1 -> it.first() to null
-                else -> it[0] to it[1]
-            }
+            if (it.isEmpty()) null else Node.Decl.Property.Accessors(
+                first = it.first(),
+                second = it.getOrNull(1)
+            )
         }
     ).map(v)
 

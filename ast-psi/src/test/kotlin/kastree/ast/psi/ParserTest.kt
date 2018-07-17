@@ -52,7 +52,9 @@ class ParserTest {
               xyzzy<*>()
             }
 
+            class Foo<T> where @bar T : Bar, @baz T : Baz
+
         """.trimIndent())
-//        println("FILE: $file")
+        // println("FILE: $file")
     }
 }
