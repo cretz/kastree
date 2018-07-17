@@ -63,7 +63,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     parenChildren(params)
                 }
                 is Node.Decl.Init ->
-                    append("init").also { childBlock(stmts) }
+                    append("init ").also { childBlock(stmts) }
                 is Node.Decl.Func -> {
                     childMods().append("fun ")
                     bracketedChildren(typeParams, " ")
@@ -127,7 +127,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     childMods().append("constructor")
                     parenChildren(params)
                     if (delegationCall != null) append(": ").also { children(delegationCall) }
-                    childBlock(stmts)
+                    if (stmts.isNotEmpty()) append(' ').also { childBlock(stmts) }
                 }
                 is Node.Decl.EnumEntry -> {
                     childMods().append(name)
@@ -172,14 +172,61 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     append("try ")
                     childBlock(stmts)
                     if (catches.isNotEmpty()) children(catches, " ", prefix = " ")
-                    if (finallyStmts.isNotEmpty()) append(" finally").also { childBlock(finallyStmts) }
+                    if (finallyStmts.isNotEmpty()) append(" finally" ).also { childBlock(finallyStmts) }
                 }
                 is Node.Expr.Try.Catch -> {
                     append("catch (")
                     childAnns(sameLine = true)
-                    append(varName).append(": ").also { children(varType) }.append(")")
+                    append(varName).append(": ").also { children(varType) }.append(") ")
                     childBlock(stmts)
                 }
+                is Node.Expr.For -> {
+                    append("for (")
+                    childAnns(sameLine = true)
+                    childVars(vars).append(" in ").also { children(inExpr) }.append(") ")
+                    children(body)
+                }
+                is Node.Expr.While -> {
+                    if (!doWhile) append("while (").also { children(expr) }.append(") ").also { children(body) }
+                    else append("do ").also { children(body) }.append(" while (").also { children(expr) }.append(')')
+                }
+                is Node.Expr.BinaryOp ->
+                    children(listOf(lhs, oper, rhs), " ")
+                is Node.Expr.BinaryOp.Oper.Infix ->
+                    append(str)
+                is Node.Expr.BinaryOp.Oper.Token ->
+                    append(token.str)
+                is Node.Expr.UnaryOp ->
+                    if (prefix) children(oper, expr) else children(expr, oper)
+                is Node.Expr.UnaryOp.Oper ->
+                    append(token.str)
+                is Node.Expr.TypeOp ->
+                    children(listOf(lhs, oper, rhs), " ")
+                is Node.Expr.TypeOp.Oper ->
+                    append(token.str)
+                is Node.Expr.CallableRef -> {
+                    if (expr != null) children(expr)
+                    append("::").append(name)
+                }
+                is Node.Expr.ClassLit -> {
+                    if (expr != null) children(expr)
+                    append("::class")
+                }
+                is Node.Expr.Paren ->
+                    append('(').also { children(expr) }.append(')')
+                is Node.Expr.StringTmpl ->
+                    append('"').also { children(elems) }.append('"')
+                is Node.Expr.StringTmpl.Elem.Regular ->
+                    append(str)
+                is Node.Expr.StringTmpl.Elem.ShortTmpl ->
+                    append('$').append(str)
+                is Node.Expr.StringTmpl.Elem.UnicodeEsc ->
+                    append("\\u").append(digits)
+                is Node.Expr.StringTmpl.Elem.RegularEsc ->
+                    append('\\').append(char)
+                is Node.Expr.StringTmpl.Elem.LongTmpl ->
+                    append("\${").also { children(expr) }.append('}')
+                // TODO: more
                 else -> super.visit(v, parent)
             }
         }
@@ -187,7 +234,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
 
     // Does not do a newline, leaves dangling ending brace
     protected fun Node.childBlock(v: List<Node.Stmt>) =
-        lineEnd(" {").indented { children(v) }.also { lineBegin("}") }
+        lineEnd("{").indented { children(v) }.also { lineBegin("}") }
 
     protected fun Node.childTypeConstraints(v: List<Node.TypeConstraint>) = this@Writer.also {
         if (v.isNotEmpty()) append(" where ").also { children(v, ", ") }
