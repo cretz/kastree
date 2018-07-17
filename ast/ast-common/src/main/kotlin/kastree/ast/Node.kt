@@ -136,6 +136,7 @@ sealed class Node {
         }
         data class TypeAlias(
             override val mods: List<Modifier>,
+            val name: String,
             val typeParams: List<TypeParam>,
             val type: Type
         ) : Decl(), WithModifiers

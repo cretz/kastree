@@ -480,8 +480,9 @@ open class Converter(
 
     fun convertTypeAlias(v: KtTypeAlias) = Node.Decl.TypeAlias(
         mods = convertModifiers(v),
+        name = v.name ?: error("No type alias name for $v"),
         typeParams = v.typeParameters.map(::convertTypeParam),
-        type = convertType(v.getTypeReference() ?: error("No type ref for alias $v"))
+        type = convertType(v.getTypeReference() ?: error("No type alias ref for $v"))
     ).map(v)
 
     fun convertTypeConstraint(v: KtTypeConstraint) = Node.TypeConstraint(
