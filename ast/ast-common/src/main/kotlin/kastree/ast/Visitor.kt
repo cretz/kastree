@@ -121,6 +121,7 @@ open class Visitor {
                 visitChildren(type)
             }
             is Node.TypeRef.Paren -> {
+                visitChildren(mods)
                 visitChildren(type)
             }
             is Node.TypeRef.Func -> {

@@ -14,7 +14,7 @@ object Corpus {
         )
         require(Files.isDirectory(root)) { "Dir not found at $root" }
         Files.walk(root).filter { it.toString().endsWith(".kt") }.toList().map {
-            Unit(
+            Unit.FromFile(
                 relativePath = root.relativize(it),
                 fullPath = it,
                 // Text files (same name w/ ext changed from kt to txt) have <whitespace>PsiElement:<error>
@@ -27,11 +27,27 @@ object Corpus {
         }
     }
 
-    data class Unit(
-        val relativePath: Path,
-        val fullPath: Path,
-        val errorMessages: List<String>
-    ) {
-        override fun toString() = relativePath.toString()
+    sealed class Unit {
+        abstract val name: String
+        abstract val errorMessages: List<String>
+        abstract fun read(): String
+        final override fun toString() = name
+
+        data class FromFile(
+            val relativePath: Path,
+            val fullPath: Path,
+            override val errorMessages: List<String>
+        ) : Unit() {
+            override val name: String get() = relativePath.toString()
+            override fun read() = fullPath.toFile().readText()
+        }
+
+        data class FromString(
+            override val name: String,
+            val contents: String,
+            override val errorMessages: List<String> = emptyList()
+        ) : Unit() {
+            override fun read() = contents
+        }
     }
 }

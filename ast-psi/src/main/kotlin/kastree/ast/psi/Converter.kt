@@ -26,18 +26,7 @@ open class Converter(
     ).map(v)
 
     fun convertAnnotationSet(v: KtAnnotation) = Node.Modifier.AnnotationSet(
-        target = when (v.useSiteTarget?.getAnnotationUseSiteTarget()) {
-            null -> null
-            AnnotationUseSiteTarget.FIELD -> Node.Modifier.AnnotationSet.Target.FIELD
-            AnnotationUseSiteTarget.FILE -> Node.Modifier.AnnotationSet.Target.FILE
-            AnnotationUseSiteTarget.PROPERTY -> Node.Modifier.AnnotationSet.Target.PROPERTY
-            AnnotationUseSiteTarget.PROPERTY_GETTER -> Node.Modifier.AnnotationSet.Target.GET
-            AnnotationUseSiteTarget.PROPERTY_SETTER -> Node.Modifier.AnnotationSet.Target.SET
-            AnnotationUseSiteTarget.RECEIVER -> Node.Modifier.AnnotationSet.Target.RECEIVER
-            AnnotationUseSiteTarget.CONSTRUCTOR_PARAMETER -> Node.Modifier.AnnotationSet.Target.PARAM
-            AnnotationUseSiteTarget.SETTER_PARAMETER -> Node.Modifier.AnnotationSet.Target.SETPARAM
-            AnnotationUseSiteTarget.PROPERTY_DELEGATE_FIELD -> Node.Modifier.AnnotationSet.Target.DELEGATE
-        },
+        target = v.useSiteTarget?.let(::convertAnnotationSetTarget),
         anns = v.entries.map(::convertAnnotation)
     ).map(v)
 
@@ -45,7 +34,10 @@ open class Converter(
         // We go over the node children because we want to preserve order
         when (elem) {
             is KtAnnotationEntry ->
-                listOf(Node.Modifier.AnnotationSet(target = null, anns = listOf(convertAnnotation(elem))).map(elem))
+                listOf(Node.Modifier.AnnotationSet(
+                    target = elem.useSiteTarget?.let(::convertAnnotationSetTarget),
+                    anns = listOf(convertAnnotation(elem))
+                ).map(elem))
             is KtAnnotation ->
                 listOf(convertAnnotationSet(elem))
             is KtFileAnnotationList ->
@@ -53,6 +45,18 @@ open class Converter(
             else ->
                 emptyList()
         }
+    }
+
+    fun convertAnnotationSetTarget(v: KtAnnotationUseSiteTarget) = when (v.getAnnotationUseSiteTarget()) {
+        AnnotationUseSiteTarget.FIELD -> Node.Modifier.AnnotationSet.Target.FIELD
+        AnnotationUseSiteTarget.FILE -> Node.Modifier.AnnotationSet.Target.FILE
+        AnnotationUseSiteTarget.PROPERTY -> Node.Modifier.AnnotationSet.Target.PROPERTY
+        AnnotationUseSiteTarget.PROPERTY_GETTER -> Node.Modifier.AnnotationSet.Target.GET
+        AnnotationUseSiteTarget.PROPERTY_SETTER -> Node.Modifier.AnnotationSet.Target.SET
+        AnnotationUseSiteTarget.RECEIVER -> Node.Modifier.AnnotationSet.Target.RECEIVER
+        AnnotationUseSiteTarget.CONSTRUCTOR_PARAMETER -> Node.Modifier.AnnotationSet.Target.PARAM
+        AnnotationUseSiteTarget.SETTER_PARAMETER -> Node.Modifier.AnnotationSet.Target.SETPARAM
+        AnnotationUseSiteTarget.PROPERTY_DELEGATE_FIELD -> Node.Modifier.AnnotationSet.Target.DELEGATE
     }
 
     fun convertArrayAccess(v: KtArrayAccessExpression) = Node.Expr.ArrayAccess(
@@ -520,7 +524,8 @@ open class Converter(
     fun convertType(v: KtTypeProjection) = v.typeReference?.let { convertType(it) }
 
     fun convertType(v: KtTypeReference): Node.Type = Node.Type(
-        mods = convertModifiers(v),
+        // Paren modifiers are inside the ref...
+        mods = if (v.hasParentheses()) emptyList() else convertModifiers(v),
         ref = convertTypeRef(v)
     ).map(v)
 
@@ -571,9 +576,13 @@ open class Converter(
         else convertType(it)
     } ?: emptyList()
 
-    fun convertTypeRef(v: KtTypeReference) = convertTypeRef(v.typeElement ?: error("Missing typ elem")).let {
-        if (v.hasParentheses()) Node.TypeRef.Paren(it).map(v) else it
-    }
+    fun convertTypeRef(v: KtTypeReference) =
+        convertTypeRef(v.typeElement ?: error("Missing typ elem")).let {
+            if (!v.hasParentheses()) it else Node.TypeRef.Paren(
+                mods = convertModifiers(v),
+                type = it
+            ).map(v)
+        }
 
     fun convertTypeRef(v: KtTypeElement): Node.TypeRef = when (v) {
         is KtFunctionType -> Node.TypeRef.Func(

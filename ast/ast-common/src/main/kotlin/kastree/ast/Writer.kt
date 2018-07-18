@@ -10,6 +10,14 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
     protected fun lineEnd(str: String = "") = append(str).append('\n')
     protected fun append(ch: Char) = also { app.append(ch) }
     protected fun append(str: String) = also { app.append(str) }
+    protected fun appendName(name: String) =
+        if (KEYWORDS.contains(name)) append("`$name`") else append(name)
+    protected fun appendNames(names: List<String>, sep: String) = also {
+        names.forEachIndexed { index, name ->
+            if (index > 0) append(sep)
+            appendName(name)
+        }
+    }
     protected fun <T> indented(fn: () -> T): T = run {
         indent += "    "
         fn().also { indent = indent.dropLast(4) }
@@ -27,9 +35,10 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     childrenLines(decls, sepLineCount = 2, lastSepLineCount = 1)
                 }
                 is Node.Package ->
-                    childMods().append("package ${names.joinToString(".")}")
-                is Node.Import -> names.joinToString(".").let {
-                    append("import " + if (wildcard) "$it.*" else if (alias != null) "$it as $alias" else it)
+                    childMods().append("package ").appendNames(names, ".")
+                is Node.Import -> {
+                    append("import ").appendNames(names, ".")
+                    if (wildcard) append(".*") else if (alias != null) append(" as ").appendName(alias)
                 }
                 is Node.Decl.Structured -> childMods().also {
                     append(when (form) {
@@ -39,7 +48,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                         Node.Decl.Structured.Form.OBJECT -> "object "
                         Node.Decl.Structured.Form.COMPANION_OBJECT -> "companion object "
                     })
-                    if (form != Node.Decl.Structured.Form.COMPANION_OBJECT || name != "Companion") append(name)
+                    if (form != Node.Decl.Structured.Form.COMPANION_OBJECT || name != "Companion") appendName(name)
                     bracketedChildren(typeParams)
                     children(primaryConstructor)
                     if (parents.isNotEmpty()) {
@@ -53,7 +62,11 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                         val enumEntries = members.map { it as? Node.Decl.EnumEntry }.takeWhile { it != null }
                         enumEntries.forEachIndexed { index, enumEntry ->
                             lineBegin().also { children(enumEntry) }
-                            lineEnd(if (index == enumEntries.size - 1 && index < members.size - 1) ";" else ",")
+                            when (index) {
+                                members.size - 1 -> lineEnd()
+                                enumEntries.size - 1 -> lineEnd(";").line()
+                                else -> lineEnd(",")
+                            }
                         }
                         // Now the rest of the members
                         childrenLines(members.drop(enumEntries.size), sepLineCount = 2, lastSepLineCount = 1)
@@ -78,7 +91,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     childMods().append("fun ")
                     bracketedChildren(typeParams, " ")
                     if (receiverType != null) children(receiverType).append(".")
-                    append(name)
+                    appendName(name)
                     bracketedChildren(paramTypeParams)
                     parenChildren(params)
                     if (type != null) append(": ").also { children(type) }
@@ -88,7 +101,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                 is Node.Decl.Func.Param -> {
                     if (mods.isNotEmpty()) childMods(newlines = false).append(' ')
                     if (readOnly == true) append("val ") else if (readOnly == false) append("var ")
-                    append(name).append(": ").also { children(type) }
+                    appendName(name).append(": ").also { children(type) }
                     if (default != null) append(" = ").also { children(default) }
                 }
                 is Node.Decl.Func.Body.Block ->
@@ -108,7 +121,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     if (accessors != null) lineEnd().indented { children(accessors) }
                 }
                 is Node.Decl.Property.Var -> {
-                    append(name)
+                    appendName(name)
                     if (type != null) append(": ").also { children(type) }
                 }
                 is Node.Decl.Property.Accessors -> {
@@ -128,14 +141,14 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     if (body != null) {
                         append('(')
                         childMods(newlines = false)
-                        append(paramName ?: error("Missing setter param name when body present"))
+                        appendName(paramName ?: error("Missing setter param name when body present"))
                         if (paramType != null) append(": ").also { children(paramType) }
                         append(") ")
                         children(body)
                     }
                 }
                 is Node.Decl.TypeAlias -> {
-                    childMods().append("typealias ").append(name)
+                    childMods().append("typealias ").appendName(name)
                     bracketedChildren(typeParams).append(" = ")
                     children(type)
                 }
@@ -145,41 +158,45 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     if (delegationCall != null) append(": ").also { children(delegationCall) }
                     if (stmts.isNotEmpty()) append(' ').also { childBlock(stmts) }
                 }
+                is Node.Decl.Constructor.DelegationCall ->
+                    append(target.name.toLowerCase()).also { parenChildren(args) }
                 is Node.Decl.EnumEntry -> {
-                    childMods().append(name)
+                    childMods().appendName(name)
                     if (args.isNotEmpty()) parenChildren(args)
                     if (members.isNotEmpty()) lineEnd(" {").indented {
                         childrenLines(members, sepLineCount = 2, lastSepLineCount = 1)
                     }.lineBegin("}")
                 }
                 is Node.TypeParam -> {
-                    childMods(newlines = false).append(name)
+                    childMods(newlines = false).appendName(name)
                     if (type != null) append(": ").also { children(type) }
                 }
                 is Node.TypeConstraint ->
-                    childAnns(sameLine = true).append(name).append(": ").also { children(type) }
+                    childAnns(sameLine = true).appendName(name).append(": ").also { children(type) }
                 is Node.TypeRef.Paren ->
-                    append('(').also { children(type) }.append(')')
+                    append('(').also {
+                        childModsBeforeType(type).also { children(type) }
+                    }.append(')')
                 is Node.TypeRef.Func -> {
                     if (receiverType != null) children(receiverType).append('.')
                     parenChildren(params).append(" -> ").also { children(type) }
                 }
                 is Node.TypeRef.Func.Param -> {
-                    if (name != null) append(name).append(": ")
+                    if (name != null) appendName(name).append(": ")
                     children(type)
                 }
                 is Node.TypeRef.Simple ->
                     children(pieces, ".")
                 is Node.TypeRef.Simple.Piece ->
-                    append(name).also { bracketedChildren(typeParams) }
+                    appendName(name).also { bracketedChildren(typeParams) }
                 is Node.TypeRef.Nullable ->
                     children(type).append('?')
                 is Node.TypeRef.Dynamic ->
                     append("dynamic")
                 is Node.Type ->
-                    childMods(newlines = false).also { children(ref) }
+                    childModsBeforeType(ref).also { children(ref) }
                 is Node.ValueArg -> {
-                    if (name != null) append(name).append(" = ")
+                    if (name != null) appendName(name).append(" = ")
                     if (asterisk) append('*')
                     children(expr)
                 }
@@ -197,7 +214,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                 is Node.Expr.Try.Catch -> {
                     append("catch (")
                     childAnns(sameLine = true)
-                    append(varName).append(": ").also { children(varType) }.append(") ")
+                    appendName(varName).append(": ").also { children(varType) }.append(") ")
                     childBlock(stmts)
                 }
                 is Node.Expr.For -> {
@@ -232,7 +249,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     append(token.str)
                 is Node.Expr.DoubleColonRef.Callable -> {
                     if (recv != null) children(recv)
-                    append("::").append(name)
+                    append("::").appendName(name)
                 }
                 is Node.Expr.DoubleColonRef.Class -> {
                     if (recv != null) children(recv)
@@ -249,7 +266,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                 is Node.Expr.StringTmpl.Elem.Regular ->
                     append(str)
                 is Node.Expr.StringTmpl.Elem.ShortTmpl ->
-                    append('$').append(str)
+                    append('$').appendName(str)
                 is Node.Expr.StringTmpl.Elem.UnicodeEsc ->
                     append("\\u").append(digits)
                 is Node.Expr.StringTmpl.Elem.RegularEsc ->
@@ -271,12 +288,12 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                 }
                 is Node.Expr.This -> {
                     append("this")
-                    if (label != null) append('@').append(label)
+                    if (label != null) append('@').appendName(label)
                 }
                 is Node.Expr.Super -> {
                     append("super")
                     if (typeArg != null) append('<').also { children(typeArg) }.append('>')
-                    if (label != null) append('@').append(label)
+                    if (label != null) append('@').appendName(label)
                 }
                 is Node.Expr.When -> {
                     append("when")
@@ -309,23 +326,23 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     append("throw ").also { children(expr) }
                 is Node.Expr.Return -> {
                     append("return")
-                    if (label != null) append('@').append(label)
+                    if (label != null) append('@').appendName(label)
                     if (expr != null) append(' ').also { children(expr) }
                 }
                 is Node.Expr.Continue -> {
                     append("continue")
-                    if (label != null) append('@').append(label)
+                    if (label != null) append('@').appendName(label)
                 }
                 is Node.Expr.Break -> {
                     append("break")
-                    if (label != null) append('@').append(label)
+                    if (label != null) append('@').appendName(label)
                 }
                 is Node.Expr.CollLit ->
                     children(exprs, ", ", "[", "]")
                 is Node.Expr.Name ->
-                    append(name)
+                    appendName(name)
                 is Node.Expr.Labeled ->
-                    append(label).append("@ ").also { children(expr) }
+                    appendName(label).append("@ ").also { children(expr) }
                 is Node.Expr.Annotated ->
                     childAnns(sameLine = true).also { children(expr) }
                 is Node.Expr.Call -> {
@@ -336,7 +353,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                 }
                 is Node.Expr.Call.TrailLambda -> {
                     if (anns.isNotEmpty()) childAnns(sameLine = true).append(' ')
-                    if (label != null) append(label).append(' ')
+                    if (label != null) appendName(label).append("@ ")
                     children(func)
                 }
                 is Node.Expr.ArrayAccess -> {
@@ -354,7 +371,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     else children(anns, " ", "[", "]")
                 }
                 is Node.Modifier.AnnotationSet.Annotation -> {
-                    append(names.joinToString("."))
+                    appendNames(names, ".")
                     bracketedChildren(typeArgs)
                     if (args.isNotEmpty()) parenChildren(args)
                 }
@@ -407,6 +424,18 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
             }
         }
 
+    protected fun Node.WithModifiers.childModsBeforeType(ref: Node.TypeRef) = this@Writer.also {
+        // As a special case, if there is a trailing annotation with no args and the ref has a paren which is a paren
+        // type or a non-receiver fn type, then we need to add an empty set of parens ourselves
+        val shouldAddParens =
+            (mods.lastOrNull() as? Node.Modifier.AnnotationSet)?.anns?.singleOrNull()?.
+                takeIf { it.args.isEmpty() }?.
+                let { ref is Node.TypeRef.Paren || (ref is Node.TypeRef.Func && ref.receiverType == null) } ?: false
+        (this as Node).children(mods, " ")
+        if (shouldAddParens) append("()")
+        append(' ')
+    }
+
     protected inline fun Node.children(vararg v: Node?) = this@Writer.also { v.forEach { visitChildren(it) } }
 
     // Null list values are asterisks
@@ -442,7 +471,13 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
         }
 
     companion object {
-        fun write(v: Node) = write(v, StringBuilder())
+        val KEYWORDS = setOf(
+            "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface",
+            "is", "null", "object", "package", "return", "super", "this", "throw", "true", "try", "typealias",
+            "typeof", "val", "var", "when", "while"
+        )
+
+        fun write(v: Node) = write(v, StringBuilder()).toString()
         fun <T: Appendable> write(v: Node, app: T) = app.also { Writer(it).write(v) }
     }
 }

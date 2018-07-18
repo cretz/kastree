@@ -173,7 +173,10 @@ sealed class Node {
     ) : Node(), WithAnnotations
 
     sealed class TypeRef : Node() {
-        data class Paren(val type: TypeRef) : TypeRef()
+        data class Paren(
+            override val mods: List<Modifier>,
+            val type: TypeRef
+        ) : TypeRef(), WithModifiers
         data class Func(
             val receiverType: Type?,
             val params: List<Param>,
@@ -294,21 +297,6 @@ sealed class Node {
                 ) : Recv()
             }
         }
-//        data class CallableRef(
-//            val recv: Recv?,
-//            val name: String
-//        ) : Expr() {
-//            sealed class Recv : Node() {
-//                data class Expr(val expr: Node.Expr) : Recv()
-//                data class Type(
-//                    val type: TypeRef.Simple,
-//                    val questionMarks: Int
-//                ) : Recv()
-//            }
-//        }
-//        data class ClassLit(
-//            val expr: Expr?
-//        ) : Expr()
         data class Paren(
             val expr: Expr
         ) : Expr()
