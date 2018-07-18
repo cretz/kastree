@@ -1,7 +1,7 @@
 package kastree.ast
 
 open class Visitor {
-    open fun <T: Node?> visit(v: T, parent: Node) = v?.run {
+    protected open fun <T: Node?> visit(v: T, parent: Node) = v?.run {
         when (this) {
             is Node.File -> {
                 visitChildren(anns)
@@ -285,7 +285,7 @@ open class Visitor {
         }
     }
 
-    inline fun <T: Node?> Node?.visitChildren(v: T) { visit(v, this!!) }
+    protected inline fun <T: Node?> Node?.visitChildren(v: T) { visit(v, this!!) }
 
-    inline fun <T: Node?> Node?.visitChildren(v: List<T>) { v.forEach { orig -> visit(orig, this!!) } }
+    protected inline fun <T: Node?> Node?.visitChildren(v: List<T>) { v.forEach { orig -> visit(orig, this!!) } }
 }

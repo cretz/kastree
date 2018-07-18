@@ -15,6 +15,8 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
         fn().also { indent = indent.dropLast(4) }
     }
 
+    fun write(v: Node) { visit(v, v) }
+
     override fun <T : Node?> visit(v: T, parent: Node) {
         v?.apply {
             when (this) {
@@ -46,7 +48,14 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     }
                     childTypeConstraints(typeConstraints)
                     if (members.isNotEmpty()) lineEnd(" {").indented {
-                        childrenLines(members, sepLineCount = 2, lastSepLineCount = 1)
+                        // First, do all the enum entries if there are any
+                        val enumEntries = members.map { it as? Node.Decl.EnumEntry }.takeWhile { it != null }
+                        enumEntries.forEachIndexed { index, enumEntry ->
+                            lineBegin().also { children(enumEntry) }
+                            lineEnd(if (index == enumEntries.size - 1 && index < members.size - 1) ";" else ",")
+                        }
+                        // Now the rest of the members
+                        childrenLines(members.drop(enumEntries.size), sepLineCount = 2, lastSepLineCount = 1)
                     }.lineBegin("}")
                 }
                 is Node.Decl.Structured.Parent.CallConstructor -> {
@@ -135,8 +144,6 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     if (members.isNotEmpty()) lineEnd(" {").indented {
                         childrenLines(members, sepLineCount = 2, lastSepLineCount = 1)
                     }.lineBegin("}")
-                    // We see if we're the last one in the enum decl and if so put semicolon, otherwise comma
-                    append(if ((parent as Node.Decl.Structured).members.last() == this) ";" else ",")
                 }
                 is Node.TypeParam -> {
                     childMods(newlines = false).append(name)
@@ -226,15 +233,116 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     append('\\').append(char)
                 is Node.Expr.StringTmpl.Elem.LongTmpl ->
                     append("\${").also { children(expr) }.append('}')
-                // TODO: more
-                else -> super.visit(v, parent)
+                is Node.Expr.Const ->
+                    append(value)
+                is Node.Expr.Brace -> {
+                    append('{')
+                    if (params.isNotEmpty()) append(' ').also { children(params, ", ", "", " ->") }
+                    if (stmts.size <= 1) append(' ').also { children(stmts) }.append(" }")
+                    else lineEnd().also { childrenLines(stmts) }.lineBegin("}")
+                }
+                is Node.Expr.Brace.Param -> {
+                    childVars(vars)
+                    if (destructType != null) append(": ").also { children(destructType) }
+                }
+                is Node.Expr.This -> {
+                    append("this")
+                    if (label != null) append('@').append(label)
+                }
+                is Node.Expr.Super -> {
+                    append("super")
+                    if (typeArg != null) append('<').also { children(typeArg) }.append('>')
+                    if (label != null) append('@').append(label)
+                }
+                is Node.Expr.When -> {
+                    append("when")
+                    if (expr != null) append('(').also { children(expr) }.append(')')
+                    lineEnd(" {").indented { childrenLines(entries) }.lineBegin("}")
+                }
+                is Node.Expr.When.Entry -> {
+                    if (conds.isEmpty()) append("else")
+                    else children(conds, ", ")
+                    append(" -> ").also { children(body) }
+                }
+                is Node.Expr.When.Cond.Expr ->
+                    children(expr)
+                is Node.Expr.When.Cond.In -> {
+                    if (not) append('!')
+                    append("in ").also { children(expr) }
+                }
+                is Node.Expr.When.Cond.Is -> {
+                    if (not) append('!')
+                    append("is ").also { children(type) }
+                }
+                is Node.Expr.Object -> {
+                    append("object")
+                    if (parents.isNotEmpty()) append(" : ").also { children(parents, ", ") }
+                    if (members.isNotEmpty()) lineEnd(" {").indented {
+                        childrenLines(members, sepLineCount = 2, lastSepLineCount = 1)
+                    }.lineBegin("}")
+                }
+                is Node.Expr.Throw ->
+                    append("throw ").also { children(expr) }
+                is Node.Expr.Return -> {
+                    append("return")
+                    if (label != null) append('@').append(label)
+                    if (expr != null) append(' ').also { children(expr) }
+                }
+                is Node.Expr.Continue -> {
+                    append("continue")
+                    if (label != null) append('@').append(label)
+                }
+                is Node.Expr.Break -> {
+                    append("break")
+                    if (label != null) append('@').append(label)
+                }
+                is Node.Expr.CollLit ->
+                    children(exprs, ", ", "[", "]")
+                is Node.Expr.Name ->
+                    append(name)
+                is Node.Expr.Labeled ->
+                    append(label).append("@ ").also { children(expr) }
+                is Node.Expr.Annotated ->
+                    childAnns(sameLine = true).append(' ').also { children(expr) }
+                is Node.Expr.Call -> {
+                    children(expr)
+                    bracketedChildren(typeArgs)
+                    parenChildren(args)
+                    if (lambda != null) append(' ').also { children(lambda) }
+                }
+                is Node.Expr.Call.TrailLambda -> {
+                    if (anns.isNotEmpty()) childAnns(sameLine = true).append(' ')
+                    if (label != null) append(label).append(' ')
+                    children(func)
+                }
+                is Node.Expr.ArrayAccess -> {
+                    children(expr)
+                    children(indices, ", ", "[", "]")
+                }
+                is Node.Stmt.Decl ->
+                    children(decl)
+                is Node.Stmt.Expr ->
+                    children(expr)
+                is Node.Modifier.AnnotationSet -> {
+                    append('@')
+                    if (target != null) append(target.name.toLowerCase()).append(':')
+                    if (anns.size == 1) children(anns)
+                    else children(anns, " ", "[", "]")
+                }
+                is Node.Modifier.AnnotationSet.Annotation -> {
+                    append(names.joinToString("."))
+                    bracketedChildren(typeArgs)
+                    if (args.isNotEmpty()) parenChildren(args)
+                }
+                is Node.Modifier.Lit ->
+                    append(keyword.name.toLowerCase())
             }
         }
     }
 
     // Does not do a newline, leaves dangling ending brace
     protected fun Node.childBlock(v: List<Node.Stmt>) =
-        lineEnd("{").indented { children(v) }.also { lineBegin("}") }
+        lineEnd("{").indented { childrenLines(v) }.also { lineBegin("}") }
 
     protected fun Node.childTypeConstraints(v: List<Node.TypeConstraint>) = this@Writer.also {
         if (v.isNotEmpty()) append(" where ").also { children(v, ", ") }
@@ -305,4 +413,9 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
             }
             append(postfix)
         }
+
+    companion object {
+        fun write(v: Node) = write(v, StringBuilder())
+        fun <T: Appendable> write(v: Node, app: T) = app.also { Writer(it).write(v) }
+    }
 }
