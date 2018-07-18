@@ -346,8 +346,10 @@ open class Converter(
         // We go over the node children because we want to preserve order
         node.psi.let {
             when (it) {
-                is KtAnnotationEntry ->
-                    Node.Modifier.AnnotationSet(target = null, anns = listOf(convertAnnotation(it))).map(it)
+                is KtAnnotationEntry -> Node.Modifier.AnnotationSet(
+                    target = it.useSiteTarget?.let(::convertAnnotationSetTarget),
+                    anns = listOf(convertAnnotation(it))
+                ).map(it)
                 is KtAnnotation -> convertAnnotationSet(it)
                 is PsiWhiteSpace -> null
                 else -> when (node.text) {

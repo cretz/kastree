@@ -140,7 +140,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     childMods().append("set")
                     if (body != null) {
                         append('(')
-                        childMods(newlines = false)
+                        childMods(paramMods, newlines = false)
                         appendName(paramName ?: error("Missing setter param name when body present"))
                         if (paramType != null) append(": ").also { children(paramType) }
                         append(") ")
@@ -425,8 +425,11 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
 
     // Ends with newline if last is ann or space is last is mod or nothing if empty
     protected fun Node.WithModifiers.childMods(newlines: Boolean = true) =
+        (this@childMods as Node).childMods(mods, newlines)
+
+    protected fun Node.childMods(mods: List<Node.Modifier>, newlines: Boolean = true) =
         this@Writer.also {
-            if (mods.isNotEmpty()) (this@childMods as Node).apply {
+            if (mods.isNotEmpty()) this@childMods.apply {
                 mods.forEachIndexed { index, mod ->
                     children(mod)
                     if (newlines && (mod is Node.Modifier.AnnotationSet ||
@@ -470,6 +473,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                 val moreLines = if (index == v.size - 1) lastSepLineCount else sepLineCount
                 if (moreLines > 0) {
                     if (stmtRequiresEmptyBraceSetBeforeLineEnd(node, v.getOrNull(index + 1))) append(" {}")
+                    if (stmtRequiresSemicolonSetBeforeLineEnd(node, v.getOrNull(index + 1))) append(';')
                     lineEnd()
                     (1 until moreLines).forEach { line() }
                 }
@@ -486,6 +490,26 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
         if (next !is Node.Stmt.Expr || (next.expr !is Node.Expr.Paren &&
             (next.expr !is Node.Expr.Annotated || next.expr.expr !is Node.Expr.Paren))) return false
         return true
+    }
+
+    protected fun stmtRequiresSemicolonSetBeforeLineEnd(v: Node?, next: Node?) =
+        stmtHasModifierLocalVarDeclAmbiguity(v, next) || stmtHasTrailingLambdaAmbiguity(v, next)
+
+    protected fun stmtHasModifierLocalVarDeclAmbiguity(v: Node?, next: Node?): Boolean {
+        // As a special case, if there is just a name stmt, and it is a modifier, and the next stmt is
+        // a decl, we need a semicolon
+        // See: https://youtrack.jetbrains.com/issue/KT-25579
+        // TODO: is there a better place to do this
+        if (v !is Node.Stmt.Expr || v.expr !is Node.Expr.Name || next !is Node.Stmt.Decl) return false
+        val name = v.expr.name.toUpperCase()
+        return Node.Modifier.Keyword.values().any { it.name == name }
+    }
+
+    protected fun stmtHasTrailingLambdaAmbiguity(v: Node?, next: Node?): Boolean {
+        // As a special case, if there is a function call stmt w/ no trailing lambda followed by a brace
+        // stmt, the call needs a semicolon
+        if (v !is Node.Stmt.Expr || v.expr !is Node.Expr.Call || v.expr.lambda != null) return false
+        return next is Node.Stmt.Expr && next.expr is Node.Expr.Brace
     }
 
     protected fun Node.children(v: List<Node?>, sep: String = "", prefix: String = "", postfix: String = "") =
