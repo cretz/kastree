@@ -138,6 +138,9 @@ open class MutableVisitor {
                         type = visitChildren(type, newCh)
                     )
                     is Node.TypeRef.Simple -> copy(
+                        pieces = visitChildren(pieces, newCh)
+                    )
+                    is Node.TypeRef.Simple.Piece -> copy(
                         typeParams = visitChildren(typeParams, newCh)
                     )
                     is Node.TypeRef.Nullable -> copy(
@@ -188,11 +191,17 @@ open class MutableVisitor {
                         oper = visitChildren(oper, newCh)
                     )
                     is Node.Expr.UnaryOp.Oper -> this
-                    is Node.Expr.CallableRef -> copy(
+                    is Node.Expr.DoubleColonRef.Callable -> copy(
+                        recv = visitChildren(recv, newCh)
+                    )
+                    is Node.Expr.DoubleColonRef.Class -> copy(
+                        recv = visitChildren(recv, newCh)
+                    )
+                    is Node.Expr.DoubleColonRef.Recv.Expr -> copy(
                         expr = visitChildren(expr, newCh)
                     )
-                    is Node.Expr.ClassLit -> copy(
-                        expr = visitChildren(expr, newCh)
+                    is Node.Expr.DoubleColonRef.Recv.Type -> copy(
+                        type = visitChildren(type, newCh)
                     )
                     is Node.Expr.Paren -> copy(
                         expr = visitChildren(expr, newCh)

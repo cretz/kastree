@@ -1,9 +1,11 @@
 package kastree.ast.psi
 
+import com.intellij.lang.ASTNode
 import com.intellij.psi.PsiWhiteSpace
 import kastree.ast.Node
 import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.children
 
@@ -39,13 +41,17 @@ open class Converter(
         anns = v.entries.map(::convertAnnotation)
     ).map(v)
 
-    fun convertAnnotationSets(v: KtAnnotated) = v.children.mapNotNull { elem ->
+    fun convertAnnotationSets(v: KtElement): List<Node.Modifier.AnnotationSet> = v.children.flatMap { elem ->
         // We go over the node children because we want to preserve order
         when (elem) {
             is KtAnnotationEntry ->
-                Node.Modifier.AnnotationSet(target = null, anns = listOf(convertAnnotation(elem))).map(elem)
-            is KtAnnotation -> convertAnnotationSet(elem)
-            else -> null
+                listOf(Node.Modifier.AnnotationSet(target = null, anns = listOf(convertAnnotation(elem))).map(elem))
+            is KtAnnotation ->
+                listOf(convertAnnotationSet(elem))
+            is KtFileAnnotationList ->
+                convertAnnotationSets(elem)
+            else ->
+                emptyList()
         }
     }
 
@@ -102,11 +108,6 @@ open class Converter(
         lambda = v.lambdaArguments.singleOrNull()?.let(::convertCallTrailLambda)
     ).map(v)
 
-    fun convertCallableRef(v: KtCallableReferenceExpression) = Node.Expr.CallableRef(
-        expr = v.receiverExpression?.let(::convertExpr),
-        name = v.callableReference.getReferencedName()
-    ).map(v)
-
     fun convertCallTrailLambda(v: KtLambdaArgument): Node.Expr.Call.TrailLambda {
         var label: String? = null
         var anns: List<Node.Modifier.AnnotationSet> = emptyList()
@@ -128,10 +129,6 @@ open class Converter(
             func = convertBrace(expr)
         ).map(v)
     }
-
-    fun convertClassLit(v: KtClassLiteralExpression) = Node.Expr.ClassLit(
-        expr = v.receiverExpression?.let(::convertExpr)
-    ).map(v)
 
     fun convertCollLit(v: KtCollectionLiteralExpression) = Node.Expr.CollLit(
         exprs = v.getInnerExpressions().map(::convertExpr)
@@ -179,6 +176,45 @@ open class Converter(
         else -> error("Unrecognized declaration type for $v")
     }
 
+    fun convertDoubleColonRefCallable(v: KtCallableReferenceExpression) = Node.Expr.DoubleColonRef.Callable(
+        recv = v.receiverExpression?.let { convertDoubleColonRefRecv(it, v.questionMarks) },
+        name = v.callableReference.getReferencedName()
+    ).map(v)
+
+    fun convertDoubleColonRefClass(v: KtClassLiteralExpression) = Node.Expr.DoubleColonRef.Class(
+        recv = v.receiverExpression?.let { convertDoubleColonRefRecv(it, v.questionMarks) }
+    ).map(v)
+
+    fun convertDoubleColonRefRecv(v: KtExpression, questionMarks: Int): Node.Expr.DoubleColonRef.Recv = when(v) {
+        is KtSimpleNameExpression -> Node.Expr.DoubleColonRef.Recv.Type(
+            type = Node.TypeRef.Simple(
+                listOf(Node.TypeRef.Simple.Piece(v.getReferencedName(), emptyList()).map(v))
+            ).map(v),
+            questionMarks = questionMarks
+        ).map(v)
+        is KtCallExpression ->
+            if (v.valueArgumentList == null && v.lambdaArguments.isEmpty())
+                Node.Expr.DoubleColonRef.Recv.Type(
+                    type = Node.TypeRef.Simple(listOf(Node.TypeRef.Simple.Piece(
+                        name = v.calleeExpression?.text ?: error("Missing text for call ref type of $v"),
+                        typeParams = convertTypeParams(v.typeArgumentList)
+                    ).map(v))).map(v),
+                    questionMarks = questionMarks
+                ).map(v)
+            else Node.Expr.DoubleColonRef.Recv.Expr(convertExpr(v)).map(v)
+        is KtDotQualifiedExpression -> {
+            val lhs = convertDoubleColonRefRecv(v.receiverExpression, questionMarks)
+            val rhs = v.selectorExpression?.let { convertDoubleColonRefRecv(it, questionMarks) }
+            if (lhs is Node.Expr.DoubleColonRef.Recv.Type && rhs is Node.Expr.DoubleColonRef.Recv.Type)
+                Node.Expr.DoubleColonRef.Recv.Type(
+                    type = Node.TypeRef.Simple(lhs.type.pieces + rhs.type.pieces).map(v),
+                    questionMarks = 0
+                ).map(v)
+            else Node.Expr.DoubleColonRef.Recv.Expr(convertExpr(v)).map(v)
+        }
+        else -> Node.Expr.DoubleColonRef.Recv.Expr(convertExpr(v)).map(v)
+    }
+
     fun convertEnumEntry(v: KtEnumEntry) = Node.Decl.EnumEntry(
         mods = convertModifiers(v),
         name = v.name ?: error("Unnamed enum"),
@@ -196,8 +232,8 @@ open class Converter(
         is KtUnaryExpression -> convertUnaryOp(v)
         is KtBinaryExpressionWithTypeRHS -> convertTypeOp(v)
         is KtIsExpression -> convertTypeOp(v)
-        is KtCallableReferenceExpression -> convertCallableRef(v)
-        is KtClassLiteralExpression -> convertClassLit(v)
+        is KtCallableReferenceExpression -> convertDoubleColonRefCallable(v)
+        is KtClassLiteralExpression -> convertDoubleColonRefClass(v)
         is KtParenthesizedExpression -> convertParen(v)
         is KtStringTemplateExpression -> convertStringTmpl(v)
         is KtConstantExpression -> convertConst(v)
@@ -530,6 +566,11 @@ open class Converter(
         type = v.extendsBound?.let(::convertTypeRef) as? Node.TypeRef.Simple
     ).map(v)
 
+    fun convertTypeParams(v: KtTypeArgumentList?) = v?.arguments?.map {
+        if (it.projectionKind == KtProjectionKind.STAR) null
+        else convertType(it)
+    } ?: emptyList()
+
     fun convertTypeRef(v: KtTypeReference) = convertTypeRef(v.typeElement ?: error("Missing typ elem")).let {
         if (v.hasParentheses()) Node.TypeRef.Paren(it).map(v) else it
     }
@@ -546,10 +587,11 @@ open class Converter(
             type = convertType(v.returnTypeReference ?: error("No return type"))
         ).map(v)
         is KtUserType -> Node.TypeRef.Simple(
-            name = v.referencedName ?: error("No type name"),
-            typeParams = v.typeArguments.map {
-                if (it.projectionKind == KtProjectionKind.STAR) null
-                else convertType(it)
+            pieces = generateSequence(v) { it.qualifier }.toList().reversed().map {
+                Node.TypeRef.Simple.Piece(
+                    name = it.referencedName ?: error("No type name for $it"),
+                    typeParams = convertTypeParams(it.typeArgumentList)
+                ).map(it)
             }
         ).map(v)
         is KtNullableType -> Node.TypeRef.Nullable(
@@ -620,5 +662,9 @@ open class Converter(
         internal val KtUserType.names get(): List<String> =
             referencedName?.let { (qualifier?.names ?: emptyList()) + it } ?: emptyList()
         internal val KtExpression?.block get() = (this as? KtBlockExpression)?.statements ?: emptyList()
+        internal val KtDoubleColonExpression.questionMarks get() =
+            generateSequence(node.firstChildNode, ASTNode::getTreeNext).
+                takeWhile { it.elementType != KtTokens.COLONCOLON }.
+                count { it.elementType == KtTokens.QUEST }
     }
 }

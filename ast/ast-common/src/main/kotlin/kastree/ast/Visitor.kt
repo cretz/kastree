@@ -132,6 +132,9 @@ open class Visitor {
                 visitChildren(type)
             }
             is Node.TypeRef.Simple -> {
+                visitChildren(pieces)
+            }
+            is Node.TypeRef.Simple.Piece -> {
                 visitChildren(typeParams)
             }
             is Node.TypeRef.Nullable -> {
@@ -182,11 +185,17 @@ open class Visitor {
                 visitChildren(oper)
             }
             is Node.Expr.UnaryOp.Oper -> {}
-            is Node.Expr.CallableRef -> {
+            is Node.Expr.DoubleColonRef.Callable -> {
+                visitChildren(recv)
+            }
+            is Node.Expr.DoubleColonRef.Class -> {
+                visitChildren(recv)
+            }
+            is Node.Expr.DoubleColonRef.Recv.Expr -> {
                 visitChildren(expr)
             }
-            is Node.Expr.ClassLit -> {
-                visitChildren(expr)
+            is Node.Expr.DoubleColonRef.Recv.Type -> {
+                visitChildren(type)
             }
             is Node.Expr.Paren -> {
                 visitChildren(expr)

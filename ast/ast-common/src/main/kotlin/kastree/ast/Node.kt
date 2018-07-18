@@ -185,10 +185,14 @@ sealed class Node {
             ) : Node()
         }
         data class Simple(
-            val name: String,
-            // Null means any
-            val typeParams: List<Type?>
-        ) : TypeRef()
+            val pieces: List<Piece>
+        ) : TypeRef() {
+            data class Piece(
+                val name: String,
+                // Null means any
+                val typeParams: List<Type?>
+            ) : Node()
+        }
         data class Nullable(val type: TypeRef) : TypeRef()
         data class Dynamic(val _unused_: Boolean = false) : TypeRef()
     }
@@ -273,13 +277,38 @@ sealed class Node {
                 AS("as"), AS_SAFE("as?"), COL(":"), IS("is"), NOT_IS("!is")
             }
         }
-        data class CallableRef(
-            val expr: Expr?,
-            val name: String
-        ) : Expr()
-        data class ClassLit(
-            val expr: Expr?
-        ) : Expr()
+        sealed class DoubleColonRef : Expr() {
+            abstract val recv: Recv?
+            data class Callable(
+                override val recv: Recv?,
+                val name: String
+            ) : DoubleColonRef()
+            data class Class(
+                override val recv: Recv?
+            ) : DoubleColonRef()
+            sealed class Recv : Node() {
+                data class Expr(val expr: Node.Expr) : Recv()
+                data class Type(
+                    val type: TypeRef.Simple,
+                    val questionMarks: Int
+                ) : Recv()
+            }
+        }
+//        data class CallableRef(
+//            val recv: Recv?,
+//            val name: String
+//        ) : Expr() {
+//            sealed class Recv : Node() {
+//                data class Expr(val expr: Node.Expr) : Recv()
+//                data class Type(
+//                    val type: TypeRef.Simple,
+//                    val questionMarks: Int
+//                ) : Recv()
+//            }
+//        }
+//        data class ClassLit(
+//            val expr: Expr?
+//        ) : Expr()
         data class Paren(
             val expr: Expr
         ) : Expr()

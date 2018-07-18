@@ -120,7 +120,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     if (body != null) {
                         append("()")
                         if (type != null) append(": ").also { children(type) }
-                        children(body)
+                        append(' ').also { children(body) }
                     }
                 }
                 is Node.Decl.Property.Accessor.Set -> {
@@ -130,7 +130,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                         childMods(newlines = false)
                         append(paramName ?: error("Missing setter param name when body present"))
                         if (paramType != null) append(": ").also { children(paramType) }
-                        append(')')
+                        append(") ")
                         children(body)
                     }
                 }
@@ -169,6 +169,8 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     children(type)
                 }
                 is Node.TypeRef.Simple ->
+                    children(pieces, ".")
+                is Node.TypeRef.Simple.Piece ->
                     append(name).also { bracketedChildren(typeParams) }
                 is Node.TypeRef.Nullable ->
                     children(type).append('?')
@@ -228,14 +230,18 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     children(listOf(lhs, oper, rhs), " ")
                 is Node.Expr.TypeOp.Oper ->
                     append(token.str)
-                is Node.Expr.CallableRef -> {
-                    if (expr != null) children(expr)
+                is Node.Expr.DoubleColonRef.Callable -> {
+                    if (recv != null) children(recv)
                     append("::").append(name)
                 }
-                is Node.Expr.ClassLit -> {
-                    if (expr != null) children(expr)
+                is Node.Expr.DoubleColonRef.Class -> {
+                    if (recv != null) children(recv)
                     append("::class")
                 }
+                is Node.Expr.DoubleColonRef.Recv.Expr ->
+                    children(expr)
+                is Node.Expr.DoubleColonRef.Recv.Type ->
+                    children(type).append("?".repeat(questionMarks))
                 is Node.Expr.Paren ->
                     append('(').also { children(expr) }.append(')')
                 is Node.Expr.StringTmpl ->
@@ -255,8 +261,9 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                 is Node.Expr.Brace -> {
                     append('{')
                     if (params.isNotEmpty()) append(' ').also { children(params, ", ", "", " ->") }
-                    if (stmts.size <= 1) append(' ').also { children(stmts) }.append(" }")
-                    else lineEnd().also { childrenLines(stmts) }.lineBegin("}")
+                    if (stmts.isEmpty()) append('}')
+                    else if (stmts.size == 1) append(' ').also { children(stmts) }.append(" }")
+                    else lineEnd().indented { childrenLines(stmts) }.lineBegin("}")
                 }
                 is Node.Expr.Brace.Param -> {
                     childVars(vars)
@@ -294,7 +301,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                 is Node.Expr.Object -> {
                     append("object")
                     if (parents.isNotEmpty()) append(" : ").also { children(parents, ", ") }
-                    if (members.isNotEmpty()) lineEnd(" {").indented {
+                    if (members.isEmpty()) append(" {}") else lineEnd(" {").indented {
                         childrenLines(members, sepLineCount = 2, lastSepLineCount = 1)
                     }.lineBegin("}")
                 }
@@ -353,6 +360,8 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                 }
                 is Node.Modifier.Lit ->
                     append(keyword.name.toLowerCase())
+                else ->
+                    error("Unrecognized node type: $this")
             }
         }
     }
