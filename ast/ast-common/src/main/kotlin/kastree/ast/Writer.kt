@@ -344,7 +344,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                 is Node.Expr.Labeled ->
                     appendName(label).append("@ ").also { children(expr) }
                 is Node.Expr.Annotated ->
-                    childAnns(sameLine = true).also { children(expr) }
+                    childAnnsBeforeExpr(expr).also { children(expr) }
                 is Node.Expr.Call -> {
                     children(expr)
                     bracketedChildren(typeArgs)
@@ -360,8 +360,9 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     children(expr)
                     children(indices, ", ", "[", "]")
                 }
-                is Node.Stmt.Decl ->
+                is Node.Stmt.Decl -> {
                     children(decl)
+                }
                 is Node.Stmt.Expr ->
                     children(expr)
                 is Node.Modifier.AnnotationSet -> {
@@ -410,6 +411,18 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
         }
     }
 
+    protected fun Node.WithAnnotations.childAnnsBeforeExpr(expr: Node.Expr) = this@Writer.also {
+        if (anns.isNotEmpty()) {
+            // As a special case, if there is a trailing annotation with no args and expr is paren,
+            // then we need to add an empty set of parens ourselves
+            val lastAnn = anns.lastOrNull()?.anns?.singleOrNull()?.takeIf { it.args.isEmpty() }
+            val shouldAddParens = lastAnn != null && expr is Node.Expr.Paren
+            (this as Node).children(anns, " ")
+            if (shouldAddParens) append("()")
+            append(' ')
+        }
+    }
+
     // Ends with newline if last is ann or space is last is mod or nothing if empty
     protected fun Node.WithModifiers.childMods(newlines: Boolean = true) =
         this@Writer.also {
@@ -425,15 +438,17 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
         }
 
     protected fun Node.WithModifiers.childModsBeforeType(ref: Node.TypeRef) = this@Writer.also {
-        // As a special case, if there is a trailing annotation with no args and the ref has a paren which is a paren
-        // type or a non-receiver fn type, then we need to add an empty set of parens ourselves
-        val shouldAddParens =
-            (mods.lastOrNull() as? Node.Modifier.AnnotationSet)?.anns?.singleOrNull()?.
-                takeIf { it.args.isEmpty() }?.
-                let { ref is Node.TypeRef.Paren || (ref is Node.TypeRef.Func && ref.receiverType == null) } ?: false
-        (this as Node).children(mods, " ")
-        if (shouldAddParens) append("()")
-        append(' ')
+        if (mods.isNotEmpty()) {
+            // As a special case, if there is a trailing annotation with no args and the ref has a paren which is a paren
+            // type or a non-receiver fn type, then we need to add an empty set of parens ourselves
+            val lastAnn = (mods.lastOrNull() as? Node.Modifier.AnnotationSet)?.anns?.
+                singleOrNull()?.takeIf { it.args.isEmpty() }
+            val shouldAddParens = lastAnn != null &&
+                (ref is Node.TypeRef.Paren || (ref is Node.TypeRef.Func && ref.receiverType == null))
+            (this as Node).children(mods, " ")
+            if (shouldAddParens) append("()")
+            append(' ')
+        }
     }
 
     protected inline fun Node.children(vararg v: Node?) = this@Writer.also { v.forEach { visitChildren(it) } }
@@ -454,11 +469,24 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                 lineBegin().also { children(node) }
                 val moreLines = if (index == v.size - 1) lastSepLineCount else sepLineCount
                 if (moreLines > 0) {
+                    if (stmtRequiresEmptyBraceSetBeforeLineEnd(node, v.getOrNull(index + 1))) append(" {}")
                     lineEnd()
                     (1 until moreLines).forEach { line() }
                 }
             }
         }
+
+    protected fun stmtRequiresEmptyBraceSetBeforeLineEnd(v: Node?, next: Node?): Boolean {
+        // As a special case, if this is a local memberless class decl stmt and the next line is a paren
+        // or ann+paren, we have to explicitly provide an empty brace set
+        // See: https://youtrack.jetbrains.com/issue/KT-25578
+        // TODO: is there a better place to do this?
+        if (v !is Node.Stmt.Decl || v.decl !is Node.Decl.Structured || v.decl.members.isNotEmpty() ||
+            v.decl.form != Node.Decl.Structured.Form.CLASS) return false
+        if (next !is Node.Stmt.Expr || (next.expr !is Node.Expr.Paren &&
+            (next.expr !is Node.Expr.Annotated || next.expr.expr !is Node.Expr.Paren))) return false
+        return true
+    }
 
     protected fun Node.children(v: List<Node?>, sep: String = "", prefix: String = "", postfix: String = "") =
         this@Writer.also {

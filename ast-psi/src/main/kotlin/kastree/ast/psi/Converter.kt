@@ -17,7 +17,19 @@ open class Converter(
     fun convertAnnotated(v: KtAnnotatedExpression) = Node.Expr.Annotated(
         anns = convertAnnotationSets(v),
         expr = convertExpr(v.baseExpression ?: error("No annotated expr for $v"))
-    ).map(v)
+    ).map(v).let {
+        // As a special case, instead of annotating a type/binary op, we mean to just annotate its lhs
+        val expr = it.expr
+        when (expr) {
+            is Node.Expr.BinaryOp -> expr.copy(
+                lhs = it.copy(expr = expr.lhs)
+            )
+            is Node.Expr.TypeOp -> expr.copy(
+                lhs = it.copy(expr = expr.lhs)
+            )
+            else -> it
+        }
+    }
 
     fun convertAnnotation(v: KtAnnotationEntry) = Node.Modifier.AnnotationSet.Annotation(
         names = v.typeReference?.names ?: error("Missing annotation name"),
