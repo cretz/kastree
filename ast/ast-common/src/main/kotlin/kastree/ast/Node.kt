@@ -301,7 +301,8 @@ sealed class Node {
             val expr: Expr
         ) : Expr()
         data class StringTmpl(
-            val elems: List<Elem>
+            val elems: List<Elem>,
+            val raw: Boolean
         ) : Expr() {
             sealed class Elem : Node() {
                 data class Regular(val str: String) : Elem()

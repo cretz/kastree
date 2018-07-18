@@ -11,7 +11,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
     protected fun append(ch: Char) = also { app.append(ch) }
     protected fun append(str: String) = also { app.append(str) }
     protected fun appendName(name: String) =
-        if (KEYWORDS.contains(name)) append("`$name`") else append(name)
+        if (name.shouldEscapeIdent) append("`$name`") else append(name)
     protected fun appendNames(names: List<String>, sep: String) = also {
         names.forEachIndexed { index, name ->
             if (index > 0) append(sep)
@@ -71,6 +71,13 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                         // Now the rest of the members
                         childrenLines(members.drop(enumEntries.size), sepLineCount = 2, lastSepLineCount = 1)
                     }.lineBegin("}")
+
+                    // As a special case, if an object is nameless and bodyless, we should give it an empty body
+                    // to avoid ambiguities with the next item
+                    // See: https://youtrack.jetbrains.com/issue/KT-25581
+                    if ((form == Node.Decl.Structured.Form.COMPANION_OBJECT ||
+                        form == Node.Decl.Structured.Form.OBJECT) && name == "Companion" && members.isEmpty())
+                        append("{}")
                 }
                 is Node.Decl.Structured.Parent.CallConstructor -> {
                     children(type)
@@ -262,7 +269,8 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                 is Node.Expr.Paren ->
                     append('(').also { children(expr) }.append(')')
                 is Node.Expr.StringTmpl ->
-                    append('"').also { children(elems) }.append('"')
+                    if (raw) append("\"\"\"").also { children(elems) }.append("\"\"\"")
+                    else append('"').also { children(elems) }.append('"')
                 is Node.Expr.StringTmpl.Elem.Regular ->
                     append(str)
                 is Node.Expr.StringTmpl.Elem.ShortTmpl ->
@@ -447,7 +455,8 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
             val lastAnn = (mods.lastOrNull() as? Node.Modifier.AnnotationSet)?.anns?.
                 singleOrNull()?.takeIf { it.args.isEmpty() }
             val shouldAddParens = lastAnn != null &&
-                (ref is Node.TypeRef.Paren || (ref is Node.TypeRef.Func && ref.receiverType == null))
+                (ref is Node.TypeRef.Paren || (ref is Node.TypeRef.Func && (
+                    ref.receiverType == null || ref.receiverType.ref is Node.TypeRef.Paren)))
             (this as Node).children(mods, " ")
             if (shouldAddParens) append("()")
             append(' ')
@@ -458,7 +467,14 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
 
     // Null list values are asterisks
     protected fun Node.bracketedChildren(v: List<Node?>, appendIfNotEmpty: String = "") = this@Writer.also {
-        if (v.isNotEmpty()) children(v.map { it ?: Node.Expr.Name("*") }, ", ", "<", ">").append(appendIfNotEmpty)
+        if (v.isNotEmpty()) {
+            append('<')
+            v.forEachIndexed { index, node ->
+                if (index > 0) append(", ")
+                if (node == null) append('*') else children(node)
+            }
+            append('>')
+        }
     }
 
     protected fun Node.parenChildren(v: List<Node?>) = children(v, ", ", "(", ")")
@@ -522,8 +538,12 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
             append(postfix)
         }
 
+    // We accept lots of false positives to be simple and not have to bring in JVM dep to do accurate check
+    protected val String.shouldEscapeIdent get() = KEYWORDS.contains(this) || first() in '0'..'9' ||
+        any { it !in 'a'..'z' && it !in 'A'..'Z' && it !in '0'..'9' }
+
     companion object {
-        val KEYWORDS = setOf(
+        protected val KEYWORDS = setOf(
             "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface",
             "is", "null", "object", "package", "return", "super", "this", "throw", "true", "try", "typealias",
             "typeof", "val", "var", "when", "while"

@@ -466,7 +466,8 @@ open class Converter(
         if (v is KtDeclaration) Node.Stmt.Decl(convertDecl(v)).map(v) else Node.Stmt.Expr(convertExpr(v)).map(v)
 
     fun convertStringTmpl(v: KtStringTemplateExpression) = Node.Expr.StringTmpl(
-        elems = v.entries.map(::convertStringTmplElem)
+        elems = v.entries.map(::convertStringTmplElem),
+        raw = v.text.startsWith("\"\"\"")
     ).map(v)
 
     fun convertStringTmplElem(v: KtStringTemplateEntry) = when (v) {
