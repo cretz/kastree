@@ -13,7 +13,7 @@ open class Converter(
     val nodeMapCallback: ((Node, KtElement) -> Unit)? = null
 ) {
     fun convertAnnotated(v: KtAnnotatedExpression) = Node.Expr.Annotated(
-        anns = v.annotations.map(::convertAnnotationSet),
+        anns = convertAnnotationSets(v),
         expr = convertExpr(v.baseExpression ?: error("No annotated expr for $v"))
     ).map(v)
 
@@ -38,6 +38,16 @@ open class Converter(
         },
         anns = v.entries.map(::convertAnnotation)
     ).map(v)
+
+    fun convertAnnotationSets(v: KtAnnotated) = v.children.mapNotNull { elem ->
+        // We go over the node children because we want to preserve order
+        when (elem) {
+            is KtAnnotationEntry ->
+                Node.Modifier.AnnotationSet(target = null, anns = listOf(convertAnnotation(elem))).map(elem)
+            is KtAnnotation -> convertAnnotationSet(elem)
+            else -> null
+        }
+    }
 
     fun convertArrayAccess(v: KtArrayAccessExpression) = Node.Expr.ArrayAccess(
         expr = convertExpr(v.arrayExpression ?: error("No array expr for $v")),
@@ -106,7 +116,7 @@ open class Converter(
                 label = getLabelName()
             }
             is KtAnnotatedExpression -> baseExpression?.extractLambda(allowParens).also {
-                anns = annotations.map(::convertAnnotationSet)
+                anns = convertAnnotationSets(this)
             }
             is KtParenthesizedExpression -> if (allowParens) expression?.extractLambda(allowParens) else null
             else -> null
@@ -218,8 +228,8 @@ open class Converter(
     }
 
     fun convertFile(v: KtFile) = Node.File(
-        anns = v.annotations.map(::convertAnnotationSet),
-        pkg = v.packageDirective?.let(::convertPackage),
+        anns = convertAnnotationSets(v),
+        pkg = v.packageDirective?.takeIf { it.packageNames.isNotEmpty() }?.let(::convertPackage),
         imports = v.importDirectives.map(::convertImport),
         decls = v.declarations.map(::convertDecl)
     ).map(v)

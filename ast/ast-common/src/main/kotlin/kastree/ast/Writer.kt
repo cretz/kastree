@@ -24,7 +24,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     if (anns.isNotEmpty()) childAnns().line()
                     childrenLines(pkg, lastSepLineCount = 2)
                     childrenLines(imports, lastSepLineCount = 2)
-                    children(decls)
+                    childrenLines(decls, sepLineCount = 2, lastSepLineCount = 1)
                 }
                 is Node.Package ->
                     childMods().append("package ${names.joinToString(".")}")
@@ -39,6 +39,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                         Node.Decl.Structured.Form.OBJECT -> "object "
                         Node.Decl.Structured.Form.COMPANION_OBJECT -> "companion object "
                     })
+                    if (form != Node.Decl.Structured.Form.COMPANION_OBJECT || name != "Companion") append(name)
                     bracketedChildren(typeParams)
                     children(primaryConstructor)
                     if (parents.isNotEmpty()) {
@@ -82,12 +83,18 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     parenChildren(params)
                     if (type != null) append(": ").also { children(type) }
                     childTypeConstraints(typeConstraints)
-                    if (body != null) children(body)
+                    if (body != null) append(' ').also { children(body) }
+                }
+                is Node.Decl.Func.Param -> {
+                    if (mods.isNotEmpty()) childMods(newlines = false).append(' ')
+                    if (readOnly == true) append("val ") else if (readOnly == false) append("var ")
+                    append(name).append(": ").also { children(type) }
+                    if (default != null) append(" = ").also { children(default) }
                 }
                 is Node.Decl.Func.Body.Block ->
                     childBlock(stmts)
                 is Node.Decl.Func.Body.Expr ->
-                    append(" = ").also { children(expr) }
+                    append("= ").also { children(expr) }
                 is Node.Decl.Property -> {
                     childMods().append(if (readOnly) "val " else "var ")
                     bracketedChildren(typeParams, " ")
@@ -157,6 +164,10 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     if (receiverType != null) children(receiverType).append('.')
                     parenChildren(params).append(" -> ").also { children(type) }
                 }
+                is Node.TypeRef.Func.Param -> {
+                    if (name != null) append(name).append(": ")
+                    children(type)
+                }
                 is Node.TypeRef.Simple ->
                     append(name).also { bracketedChildren(typeParams) }
                 is Node.TypeRef.Nullable ->
@@ -197,8 +208,14 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                     if (!doWhile) append("while (").also { children(expr) }.append(") ").also { children(body) }
                     else append("do ").also { children(body) }.append(" while (").also { children(expr) }.append(')')
                 }
-                is Node.Expr.BinaryOp ->
-                    children(listOf(lhs, oper, rhs), " ")
+                is Node.Expr.BinaryOp -> {
+                    // Some operations don't have separators
+                    val noSep = oper is Node.Expr.BinaryOp.Oper.Token && oper.token.let {
+                        it == Node.Expr.BinaryOp.Token.RANGE || it == Node.Expr.BinaryOp.Token.DOT ||
+                            it == Node.Expr.BinaryOp.Token.DOT_SAFE
+                    }
+                    children(listOf(lhs, oper, rhs), if (noSep) "" else " ")
+                }
                 is Node.Expr.BinaryOp.Oper.Infix ->
                     append(str)
                 is Node.Expr.BinaryOp.Oper.Token ->
@@ -303,11 +320,11 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
                 is Node.Expr.Labeled ->
                     append(label).append("@ ").also { children(expr) }
                 is Node.Expr.Annotated ->
-                    childAnns(sameLine = true).append(' ').also { children(expr) }
+                    childAnns(sameLine = true).also { children(expr) }
                 is Node.Expr.Call -> {
                     children(expr)
                     bracketedChildren(typeArgs)
-                    parenChildren(args)
+                    if (args.isNotEmpty() || lambda == null) parenChildren(args)
                     if (lambda != null) append(' ').also { children(lambda) }
                 }
                 is Node.Expr.Call.TrailLambda -> {
@@ -342,7 +359,8 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
 
     // Does not do a newline, leaves dangling ending brace
     protected fun Node.childBlock(v: List<Node.Stmt>) =
-        lineEnd("{").indented { childrenLines(v) }.also { lineBegin("}") }
+        if (v.isEmpty()) append("{}")
+        else lineEnd("{").indented { childrenLines(v) }.also { lineBegin("}") }
 
     protected fun Node.childTypeConstraints(v: List<Node.TypeConstraint>) = this@Writer.also {
         if (v.isNotEmpty()) append(" where ").also { children(v, ", ") }
@@ -390,7 +408,7 @@ open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
     protected fun Node.parenChildren(v: List<Node?>) = children(v, ", ", "(", ")")
 
     protected fun Node.childrenLines(v: Node?, sepLineCount: Int = 1, lastSepLineCount: Int = sepLineCount) =
-        childrenLines(listOf(v), sepLineCount, lastSepLineCount)
+        this@Writer.also { if (v != null) childrenLines(listOf(v), sepLineCount, lastSepLineCount) }
 
     protected fun Node.childrenLines(v: List<Node?>, sepLineCount: Int = 1, lastSepLineCount: Int = sepLineCount) =
         this@Writer.also {
