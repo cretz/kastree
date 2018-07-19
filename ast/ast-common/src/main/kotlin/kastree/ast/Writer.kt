@@ -96,7 +96,7 @@ open class Writer(
                     parenChildren(params)
                 }
                 is Node.Decl.Init ->
-                    append("init ").also { childBlock(stmts) }
+                    append("init ").also { children(block) }
                 is Node.Decl.Func -> {
                     childMods().append("fun ")
                     bracketedChildren(typeParams, " ")
@@ -115,7 +115,7 @@ open class Writer(
                     if (default != null) append(" = ").also { children(default) }
                 }
                 is Node.Decl.Func.Body.Block ->
-                    childBlock(stmts)
+                    children(block)
                 is Node.Decl.Func.Body.Expr ->
                     append("= ").also { children(expr) }
                 is Node.Decl.Property -> {
@@ -166,7 +166,7 @@ open class Writer(
                     childMods().append("constructor")
                     parenChildren(params)
                     if (delegationCall != null) append(": ").also { children(delegationCall) }
-                    if (stmts.isNotEmpty()) append(' ').also { childBlock(stmts) }
+                    if (block != null) append(' ').also { children(block) }
                 }
                 is Node.Decl.Constructor.DelegationCall ->
                     append(target.name.toLowerCase()).also { parenChildren(args) }
@@ -217,15 +217,15 @@ open class Writer(
                 }
                 is Node.Expr.Try -> {
                     append("try ")
-                    childBlock(stmts)
+                    children(block)
                     if (catches.isNotEmpty()) children(catches, " ", prefix = " ")
-                    if (finallyStmts.isNotEmpty()) append(" finally" ).also { childBlock(finallyStmts) }
+                    if (finallyBlock != null) append(" finally ").also { children(finallyBlock) }
                 }
                 is Node.Expr.Try.Catch -> {
                     append("catch (")
                     childAnns(sameLine = true)
                     appendName(varName).append(": ").also { children(varType) }.append(") ")
-                    childBlock(stmts)
+                    children(block)
                 }
                 is Node.Expr.For -> {
                     append("for (")
@@ -289,9 +289,7 @@ open class Writer(
                 is Node.Expr.Brace -> {
                     append('{')
                     if (params.isNotEmpty()) append(' ').also { children(params, ", ", "", " ->") }
-                    if (stmts.isEmpty()) append('}')
-                    else if (stmts.size == 1) append(' ').also { children(stmts) }.append(" }")
-                    else lineEnd().indented { childrenLines(stmts) }.lineBegin("}")
+                    children(block).append('}')
                 }
                 is Node.Expr.Brace.Param -> {
                     childVars(vars)
@@ -371,6 +369,13 @@ open class Writer(
                     children(expr)
                     children(indices, ", ", "[", "]")
                 }
+                is Node.Block -> {
+                    // Special case, no braces if the parent is a brace
+                    if (parent is Node.Expr.Brace) {
+                        if (stmts.isNotEmpty()) lineEnd().indented { childrenLines(stmts) }.lineBegin()
+                    } else if (stmts.isEmpty()) append("{}")
+                    else lineEnd("{").indented { childrenLines(stmts) }.lineBegin("}")
+                }
                 is Node.Stmt.Decl -> {
                     children(decl)
                 }
@@ -394,11 +399,6 @@ open class Writer(
             }
         }
     }
-
-    // Does not do a newline, leaves dangling ending brace
-    protected fun Node.childBlock(v: List<Node.Stmt>) =
-        if (v.isEmpty()) append("{}")
-        else lineEnd("{").indented { childrenLines(v) }.also { lineBegin("}") }
 
     protected fun Node.childTypeConstraints(v: List<Node.TypeConstraint>) = this@Writer.also {
         if (v.isNotEmpty()) append(" where ").also { children(v, ", ") }
@@ -476,7 +476,7 @@ open class Writer(
                 if (index > 0) append(", ")
                 if (node == null) append('*') else children(node)
             }
-            append('>')
+            append('>').append(appendIfNotEmpty)
         }
     }
 

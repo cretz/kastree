@@ -97,19 +97,23 @@ open class Converter {
         rhs = convertExpr(v.selectorExpression ?: error("No qualified rhs for $v"))
     ).map(v)
 
+    open fun convertBlock(v: KtBlockExpression) = Node.Block(
+        stmts = v.statements.map(::convertStmtNo)
+    ).map(v)
+
     open fun convertBrace(v: KtBlockExpression) = Node.Expr.Brace(
         params = emptyList(),
-        stmts = v.block.map(::convertStmt)
+        block = convertBlock(v)
     ).map(v)
 
     open fun convertBrace(v: KtFunctionLiteral) = Node.Expr.Brace(
         params = v.valueParameters.map(::convertBraceParam),
-        stmts = v.bodyExpression.block.map(::convertStmt)
+        block = v.bodyExpression?.let(::convertBlock)
     ).map(v)
 
     open fun convertBrace(v: KtLambdaExpression) = Node.Expr.Brace(
         params = v.valueParameters.map(::convertBraceParam),
-        stmts = v.bodyExpression.block.map(::convertStmt)
+        block = v.bodyExpression?.let(::convertBlock)
     ).map(v)
 
     open fun convertBraceParam(v: KtParameter) = Node.Expr.Brace.Param(
@@ -177,7 +181,7 @@ open class Converter {
                 args = convertValueArgs(it.valueArgumentList)
             ).map(it)
         },
-        stmts = v.bodyExpression.block.map(::convertStmt)
+        block = v.bodyExpression?.let(::convertBlock)
     ).map(v)
 
     open fun convertContinue(v: KtContinueExpression) = Node.Expr.Continue(
@@ -314,7 +318,7 @@ open class Converter {
     ).map(v)
 
     open fun convertFuncBody(v: KtExpression) =
-        if (v is KtBlockExpression) Node.Decl.Func.Body.Block(v.block.map(::convertStmt)).map(v)
+        if (v is KtBlockExpression) Node.Decl.Func.Body.Block(convertBlock(v)).map(v)
         else Node.Decl.Func.Body.Expr(convertExpr(v)).map(v)
 
     open fun convertFuncParam(v: KtParameter) = Node.Decl.Func.Param(
@@ -338,7 +342,7 @@ open class Converter {
     ).map(v)
 
     open fun convertInit(v: KtAnonymousInitializer) = Node.Decl.Init(
-        stmts = v.body.block.map(::convertStmt)
+        block = convertBlock(v.body as? KtBlockExpression ?: error("No init block for $v"))
     ).map(v)
 
     open fun convertLabeled(v: KtLabeledExpression) = Node.Expr.Labeled(
@@ -466,7 +470,7 @@ open class Converter {
         expr = v.returnedExpression?.let(::convertExpr)
     ).map(v)
 
-    open fun convertStmt(v: KtExpression) =
+    open fun convertStmtNo(v: KtExpression) =
         if (v is KtDeclaration) Node.Stmt.Decl(convertDecl(v)).map(v) else Node.Stmt.Expr(convertExpr(v)).map(v)
 
     open fun convertStringTmpl(v: KtStringTemplateExpression) = Node.Expr.StringTmpl(
@@ -527,9 +531,9 @@ open class Converter {
     ).map(v)
 
     open fun convertTry(v: KtTryExpression) = Node.Expr.Try(
-        stmts = v.tryBlock.block.map(::convertStmt),
+        block = convertBlock(v.tryBlock),
         catches = v.catchClauses.map(::convertTryCatch),
-        finallyStmts = v.finallyBlock?.finalExpression?.block?.map(::convertStmt) ?: emptyList()
+        finallyBlock = v.finallyBlock?.finalExpression?.let(::convertBlock)
     ).map(v)
 
     open fun convertTryCatch(v: KtCatchClause) = Node.Expr.Try.Catch(
@@ -537,7 +541,7 @@ open class Converter {
         varName = v.catchParameter?.name ?: error("No catch param name for $v"),
         varType = v.catchParameter?.typeReference?.
             let(::convertTypeRef) as? Node.TypeRef.Simple ?: error("Invalid catch param type for $v"),
-        stmts = v.catchBody.block.map(::convertStmt)
+        block = convertBlock(v.catchBody as? KtBlockExpression ?: error("No catch block for $v"))
     ).map(v)
 
     open fun convertType(v: KtTypeProjection) = v.typeReference?.let { convertType(it) }

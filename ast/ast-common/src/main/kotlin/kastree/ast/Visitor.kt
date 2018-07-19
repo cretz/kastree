@@ -43,7 +43,7 @@ open class Visitor {
                 visitChildren(params)
             }
             is Node.Decl.Init -> {
-                visitChildren(stmts)
+                visitChildren(block)
             }
             is Node.Decl.Func -> {
                 visitChildren(mods)
@@ -61,7 +61,7 @@ open class Visitor {
                 visitChildren(default)
             }
             is Node.Decl.Func.Body.Block -> {
-                visitChildren(stmts)
+                visitChildren(block)
             }
             is Node.Decl.Func.Body.Expr -> {
                 visitChildren(expr)
@@ -102,7 +102,7 @@ open class Visitor {
                 visitChildren(mods)
                 visitChildren(params)
                 visitChildren(delegationCall)
-                visitChildren(stmts)
+                visitChildren(block)
             }
             is Node.Decl.Constructor.DelegationCall -> {
                 visitChildren(args)
@@ -155,14 +155,14 @@ open class Visitor {
                 visitChildren(elseBody)
             }
             is Node.Expr.Try -> {
-                visitChildren(stmts)
+                visitChildren(block)
                 visitChildren(catches)
-                visitChildren(finallyStmts)
+                visitChildren(finallyBlock)
             }
             is Node.Expr.Try.Catch -> {
                 visitChildren(anns)
                 visitChildren(varType)
-                visitChildren(stmts)
+                visitChildren(block)
             }
             is Node.Expr.For -> {
                 visitChildren(anns)
@@ -214,7 +214,7 @@ open class Visitor {
             is Node.Expr.Const -> {}
             is Node.Expr.Brace -> {
                 visitChildren(params)
-                visitChildren(stmts)
+                visitChildren(block)
             }
             is Node.Expr.Brace.Param -> {
                 visitChildren(vars)
@@ -277,6 +277,9 @@ open class Visitor {
             is Node.Expr.ArrayAccess -> {
                 visitChildren(expr)
                 visitChildren(indices)
+            }
+            is Node.Block -> {
+                visitChildren(stmts)
             }
             is Node.Stmt.Decl -> {
                 visitChildren(decl)

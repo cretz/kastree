@@ -75,7 +75,7 @@ sealed class Node {
                 val params: List<Func.Param>
             ) : Node(), WithModifiers
         }
-        data class Init(val stmts: List<Stmt>) : Decl()
+        data class Init(val block: Block) : Decl()
         data class Func(
             override val mods: List<Modifier>,
             val typeParams: List<TypeParam>,
@@ -95,7 +95,7 @@ sealed class Node {
                 val default: Expr?
             ) : Node(), WithModifiers
             sealed class Body : Node() {
-                data class Block(val stmts: List<Stmt>) : Body()
+                data class Block(val block: Node.Block) : Body()
                 data class Expr(val expr: Node.Expr) : Body()
             }
         }
@@ -144,7 +144,7 @@ sealed class Node {
             override val mods: List<Modifier>,
             val params: List<Func.Param>,
             val delegationCall: DelegationCall?,
-            val stmts: List<Stmt>
+            val block: Block?
         ) : Decl(), WithModifiers {
             data class DelegationCall(
                 val target: DelegationTarget,
@@ -218,15 +218,15 @@ sealed class Node {
             val elseBody: Expr?
         ) : Expr()
         data class Try(
-            val stmts: List<Stmt>,
+            val block: Block,
             val catches: List<Catch>,
-            val finallyStmts: List<Stmt>
+            val finallyBlock: Block?
         ) : Expr() {
             data class Catch(
                 override val anns: List<Modifier.AnnotationSet>,
                 val varName: String,
                 val varType: TypeRef.Simple,
-                val stmts: List<Stmt>
+                val block: Block
             ) : Node(), WithAnnotations
         }
         data class For(
@@ -320,7 +320,7 @@ sealed class Node {
         }
         data class Brace(
             val params: List<Param>,
-            val stmts: List<Stmt>
+            val block: Block?
         ) : Expr() {
             data class Param(
                 // Multiple means destructure, null means underscore
@@ -404,6 +404,7 @@ sealed class Node {
         ) : Expr()
     }
 
+    data class Block(val stmts: List<Stmt>) : Node()
     sealed class Stmt : Node() {
         data class Decl(val decl: Node.Decl) : Stmt()
         data class Expr(val expr: Node.Expr) : Stmt()

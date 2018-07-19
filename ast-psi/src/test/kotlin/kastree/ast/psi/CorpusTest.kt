@@ -16,9 +16,10 @@ class CorpusTest(val unit: Corpus.Unit) {
         // In order to test, we parse the test code (failing and validating errors if present),
         // convert to our AST, write out our AST, re-parse what we wrote, re-convert, and compare
         try {
+            val origExtrasConv = Converter.WithExtras()
             val origCode = StringUtilRt.convertLineSeparators(unit.read())
+            val origFile = Parser(origExtrasConv).parseFile(origCode)
             if (debug) println("----ORIG----\n$origCode\n------------")
-            val origFile = Parser.parseFile(origCode)
             if (debug) println("ORIG AST: $origFile")
 
             val newCode = Writer.write(origFile)
@@ -32,16 +33,17 @@ class CorpusTest(val unit: Corpus.Unit) {
         } catch (e: Parser.ParseError) {
             if (unit.errorMessages.isEmpty()) throw e
             assertEquals(unit.errorMessages.toSet(), e.errors.map { it.errorDescription }.toSet())
+            Assume.assumeTrue("Partial parsing not supported (expected parse errors: ${unit.errorMessages})", false)
         }
     }
 
     companion object {
-        val debug = false
+        const val debug = false
 
         @JvmStatic @Parameterized.Parameters(name = "{0}")
         fun data() = Corpus.default
             // Uncomment to test a specific file
-            //.filter { it.relativePath.toString().endsWith("DocCommentAfterFileAnnotations.kt") }
+            //.filter { it.relativePath.toString().endsWith("list\\basic.kt") }
 
         // Good for quick testing
 //        @JvmStatic @Parameterized.Parameters(name = "{0}")

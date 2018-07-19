@@ -49,7 +49,7 @@ open class MutableVisitor {
                         params = visitChildren(params, newCh)
                     )
                     is Node.Decl.Init -> copy(
-                        stmts = visitChildren(stmts, newCh)
+                        block = visitChildren(block, newCh)
                     )
                     is Node.Decl.Func -> copy(
                         mods = visitChildren(mods, newCh),
@@ -67,7 +67,7 @@ open class MutableVisitor {
                         default = visitChildren(default, newCh)
                     )
                     is Node.Decl.Func.Body.Block -> copy(
-                        stmts = visitChildren(stmts, newCh)
+                        block = visitChildren(block, newCh)
                     )
                     is Node.Decl.Func.Body.Expr -> copy(
                         expr = visitChildren(expr, newCh)
@@ -108,7 +108,7 @@ open class MutableVisitor {
                         mods = visitChildren(mods, newCh),
                         params = visitChildren(params, newCh),
                         delegationCall = visitChildren(delegationCall, newCh),
-                        stmts = visitChildren(stmts, newCh)
+                        block = visitChildren(block, newCh)
                     )
                     is Node.Decl.Constructor.DelegationCall -> copy(
                         args = visitChildren(args, newCh)
@@ -161,14 +161,14 @@ open class MutableVisitor {
                         elseBody = visitChildren(elseBody, newCh)
                     )
                     is Node.Expr.Try -> copy(
-                        stmts = visitChildren(stmts, newCh),
+                        block = visitChildren(block, newCh),
                         catches = visitChildren(catches, newCh),
-                        finallyStmts = visitChildren(finallyStmts, newCh)
+                        finallyBlock = visitChildren(finallyBlock, newCh)
                     )
                     is Node.Expr.Try.Catch -> copy(
                         anns = visitChildren(anns, newCh),
                         varType = visitChildren(varType, newCh),
-                        stmts = visitChildren(stmts, newCh)
+                        block = visitChildren(block, newCh)
                     )
                     is Node.Expr.For -> copy(
                         anns = visitChildren(anns, newCh),
@@ -220,7 +220,7 @@ open class MutableVisitor {
                     is Node.Expr.Const -> this
                     is Node.Expr.Brace -> copy(
                         params = visitChildren(params, newCh),
-                        stmts = visitChildren(stmts, newCh)
+                        block = visitChildren(block, newCh)
                     )
                     is Node.Expr.Brace.Param -> copy(
                         vars = visitChildren(vars, newCh),
@@ -283,6 +283,9 @@ open class MutableVisitor {
                     is Node.Expr.ArrayAccess -> copy(
                         expr = visitChildren(expr, newCh),
                         indices = visitChildren(indices, newCh)
+                    )
+                    is Node.Block -> copy(
+                        stmts = visitChildren(stmts, newCh)
                     )
                     is Node.Stmt.Decl -> copy(
                         decl = visitChildren(decl, newCh)
