@@ -6,6 +6,10 @@ import java.nio.file.Paths
 import kotlin.streams.toList
 
 object Corpus {
+    val overrideErrors = mapOf(
+        Paths.get("kdoc", "Simple.kt") to listOf("Unclosed comment")
+    )
+
     val default by lazy {
         // Recursive from $KOTLIN_REPO/compiler/testData/psi/**/*.kt
         val root = Paths.get(
@@ -14,11 +18,12 @@ object Corpus {
         )
         require(Files.isDirectory(root)) { "Dir not found at $root" }
         Files.walk(root).filter { it.toString().endsWith(".kt") }.toList().map {
+            val relativePath = root.relativize(it)
             Unit.FromFile(
-                relativePath = root.relativize(it),
+                relativePath = relativePath,
                 fullPath = it,
                 // Text files (same name w/ ext changed from kt to txt) have <whitespace>PsiElement:<error>
-                errorMessages = Paths.get(it.toString().replace(".kt", ".txt")).let {
+                errorMessages = overrideErrors[relativePath] ?: Paths.get(it.toString().replace(".kt", ".txt")).let {
                     if (!Files.isRegularFile(it)) emptyList() else it.toFile().readLines().mapNotNull { line ->
                         line.substringAfterLast("PsiErrorElement:", "").takeIf { it.isNotEmpty() }
                     }

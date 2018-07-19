@@ -2,15 +2,23 @@ package kastree.ast
 
 open class Writer(
     val app: Appendable = StringBuilder(),
-    val extrasMap: ExtrasMap? = null // TODO: use this
+    val extrasMap: ExtrasMap? = null,
+    val includeExtraBlankLines: Boolean = extrasMap == null
 ) : Visitor() {
 
     protected var indent = ""
+    protected var elemsSinceLastLine = emptyList<Node>()
 
-    protected fun line() = append('\n')
-    protected fun line(str: String) = append(indent).append(str).append('\n')
+    protected fun endLine() = also {
+        val elems = elemsSinceLastLine
+        elemsSinceLastLine = emptyList()
+        elems.forEach { it.writeExtrasLineEnd() }
+        append('\n')
+    }
+    protected fun line() = endLine()
+    protected fun line(str: String) = append(indent).append(str).endLine()
     protected fun lineBegin(str: String = "") = append(indent).append(str)
-    protected fun lineEnd(str: String = "") = append(str).append('\n')
+    protected fun lineEnd(str: String = "") = append(str).endLine()
     protected fun append(ch: Char) = also { app.append(ch) }
     protected fun append(str: String) = also { app.append(str) }
     protected fun appendName(name: String) =
@@ -29,13 +37,14 @@ open class Writer(
     fun write(v: Node) { visit(v, v) }
 
     override fun <T : Node?> visit(v: T, parent: Node) {
+        v?.writeExtrasBefore()
         v?.apply {
             when (this) {
                 is Node.File -> {
                     if (anns.isNotEmpty()) childAnns().line()
-                    childrenLines(pkg, lastSepLineCount = 2)
-                    childrenLines(imports, lastSepLineCount = 2)
-                    childrenLines(decls, sepLineCount = 2, lastSepLineCount = 1)
+                    childrenLines(pkg, extraEndLines = 1)
+                    childrenLines(imports, extraEndLines = 1)
+                    childrenLines(decls, extraMidLines = 1)
                 }
                 is Node.Package ->
                     childMods().append("package ").appendNames(names, ".")
@@ -72,7 +81,7 @@ open class Writer(
                             }
                         }
                         // Now the rest of the members
-                        childrenLines(members.drop(enumEntries.size), sepLineCount = 2, lastSepLineCount = 1)
+                        childrenLines(members.drop(enumEntries.size), extraMidLines = 1)
                     }.lineBegin("}")
 
                     // As a special case, if an object is nameless and bodyless, we should give it an empty body
@@ -174,7 +183,7 @@ open class Writer(
                     childMods().appendName(name)
                     if (args.isNotEmpty()) parenChildren(args)
                     if (members.isNotEmpty()) lineEnd(" {").indented {
-                        childrenLines(members, sepLineCount = 2, lastSepLineCount = 1)
+                        childrenLines(members, extraMidLines = 1)
                     }.lineBegin("}")
                 }
                 is Node.TypeParam -> {
@@ -328,7 +337,7 @@ open class Writer(
                     append("object")
                     if (parents.isNotEmpty()) append(" : ").also { children(parents, ", ") }
                     if (members.isEmpty()) append(" {}") else lineEnd(" {").indented {
-                        childrenLines(members, sepLineCount = 2, lastSepLineCount = 1)
+                        childrenLines(members, extraMidLines = 1)
                     }.lineBegin("}")
                 }
                 is Node.Expr.Throw ->
@@ -396,6 +405,48 @@ open class Writer(
                     append(keyword.name.toLowerCase())
                 else ->
                     error("Unrecognized node type: $this")
+            }
+        }
+        v?.writeExtrasAfter()
+        v?.also { elemsSinceLastLine += it as Node }
+    }
+
+    protected open fun Node.writeExtrasBefore() {
+        if (extrasMap == null) return
+        // Write everything before
+        writeExtras(extrasMap.extrasBefore(this))
+    }
+
+    protected open fun Node.writeExtrasAfter() {
+        if (extrasMap == null) return
+        // Write everything after that doesn't start a line or end a line
+        writeExtras(extrasMap.extrasAfter(this).takeWhile {
+            it is Node.Extra.Comment && !it.startsLine && !it.endsLine
+        })
+    }
+
+    protected open fun Node.writeExtrasLineEnd() {
+        if (extrasMap == null) return
+        // Write everything after the first non-line starter/ender
+        writeExtras(extrasMap.extrasAfter(this).dropWhile {
+            it is Node.Extra.Comment && !it.startsLine && !it.endsLine
+        })
+    }
+
+    protected open fun Node.writeExtras(extras: List<Node.Extra>) {
+        extras.forEach {
+            when (it) {
+                is Node.Extra.BlankLines -> {
+                    (2..it.count).forEach { line() }
+                    lineEnd().lineBegin()
+                }
+                is Node.Extra.Comment -> {
+                    if (it.startsLine && it.endsLine) lineEnd(it.text).lineBegin() else {
+                        if (!it.startsLine) append(' ')
+                        append(it.text)
+                        if (!it.endsLine) append(' ')
+                    }
+                }
             }
         }
     }
@@ -482,20 +533,18 @@ open class Writer(
 
     protected fun Node.parenChildren(v: List<Node?>) = children(v, ", ", "(", ")")
 
-    protected fun Node.childrenLines(v: Node?, sepLineCount: Int = 1, lastSepLineCount: Int = sepLineCount) =
-        this@Writer.also { if (v != null) childrenLines(listOf(v), sepLineCount, lastSepLineCount) }
+    protected fun Node.childrenLines(v: Node?, extraMidLines: Int = 0, extraEndLines: Int = 0) =
+        this@Writer.also { if (v != null) childrenLines(listOf(v), extraMidLines, extraEndLines) }
 
-    protected fun Node.childrenLines(v: List<Node?>, sepLineCount: Int = 1, lastSepLineCount: Int = sepLineCount) =
+    protected fun Node.childrenLines(v: List<Node?>, extraMidLines: Int = 0, extraEndLines: Int = 0) =
         this@Writer.also {
             v.forEachIndexed { index, node ->
                 lineBegin().also { children(node) }
-                val moreLines = if (index == v.size - 1) lastSepLineCount else sepLineCount
-                if (moreLines > 0) {
-                    if (stmtRequiresEmptyBraceSetBeforeLineEnd(node, v.getOrNull(index + 1))) append(" {}")
-                    if (stmtRequiresSemicolonSetBeforeLineEnd(node, v.getOrNull(index + 1))) append(';')
-                    lineEnd()
-                    (1 until moreLines).forEach { line() }
-                }
+                if (stmtRequiresEmptyBraceSetBeforeLineEnd(node, v.getOrNull(index + 1))) append(" {}")
+                if (stmtRequiresSemicolonSetBeforeLineEnd(node, v.getOrNull(index + 1))) append(';')
+                lineEnd()
+                if (includeExtraBlankLines)
+                    (0 until if (index == v.size - 1) extraEndLines else extraMidLines).forEach { line() }
             }
         }
 
@@ -552,7 +601,9 @@ open class Writer(
             "typeof", "val", "var", "when", "while"
         )
 
-        fun write(v: Node) = write(v, StringBuilder()).toString()
-        fun <T: Appendable> write(v: Node, app: T) = app.also { Writer(it).write(v) }
+        fun write(v: Node, extrasMap: ExtrasMap? = null) =
+            write(v, StringBuilder(), extrasMap).toString()
+        fun <T: Appendable> write(v: Node, app: T, extrasMap: ExtrasMap? = null) =
+            app.also { Writer(it, extrasMap).write(v) }
     }
 }

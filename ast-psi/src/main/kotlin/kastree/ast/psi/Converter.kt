@@ -10,9 +10,7 @@ import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.psiUtil.allChildren
-import org.jetbrains.kotlin.psi.psiUtil.children
-import org.jetbrains.kotlin.psi.psiUtil.siblings
+import org.jetbrains.kotlin.psi.psiUtil.*
 import java.util.*
 
 open class Converter {
@@ -693,11 +691,17 @@ open class Converter {
         protected val nodesToPsiIdentities = IdentityHashMap<Node, Int>()
         protected val psiIdentitiesToNodes = mutableMapOf<Int, Node>()
         protected val extrasBefore = mutableMapOf<Int, List<Node.Extra>>()
+        protected val extrasWithin = mutableMapOf<Int, List<Node.Extra>>()
         protected val extrasAfter = mutableMapOf<Int, List<Node.Extra>>()
-        protected val docComments = mutableMapOf<Int, Node.Extra.Comment>()
+        // This keeps track of ws nodes we've seen before so we don't duplicate them
+        protected val seenExtraPsiIdentities = mutableSetOf<Int>()
+
         override fun extrasBefore(v: Node) = nodesToPsiIdentities[v]?.let { extrasBefore[it] } ?: emptyList()
+        override fun extrasWithin(v: Node) = nodesToPsiIdentities[v]?.let { extrasWithin[it] } ?: emptyList()
         override fun extrasAfter(v: Node) = nodesToPsiIdentities[v]?.let { extrasAfter[it] } ?: emptyList()
-        override fun docComment(v: Node) = nodesToPsiIdentities[v]?.let { docComments[it] }
+
+        internal val allExtrasBefore get() = extrasBefore
+        internal val allExtrasAfter get() = extrasAfter
 
         override fun onNode(node: Node, elem: PsiElement) {
             // We ignore whitespace and comments here to prevent recursion
@@ -710,39 +714,73 @@ open class Converter {
                 return
             }
             // Since we've never done this element before, grab its extras and persist
-            val (beforeElems, afterElems) = nodeExtraElems(elem)
-            convertExtras(beforeElems).also { if (it.isNotEmpty()) extrasBefore[elemId] = it }
+            val (beforeElems, withinElems, afterElems) = nodeExtraElems(elem)
+            convertExtras(beforeElems).map {
+                // As a special case, we make sure all non-block comments start a line when "before"
+                if (it is Node.Extra.Comment && !it.startsLine && it.text.startsWith("//")) it.copy(startsLine = true)
+                else it
+            }.also { if (it.isNotEmpty()) extrasBefore[elemId] = it }
+            convertExtras(withinElems).also { if (it.isNotEmpty()) extrasWithin[elemId] = it }
             convertExtras(afterElems).also { if (it.isNotEmpty()) extrasAfter[elemId] = it }
         }
 
-        open fun nodeExtraElems(elem: PsiElement): Pair<List<PsiElement>, List<PsiElement>> {
-            val beforeSibs = elem.siblings(forward = false, withItself = false).takeWhile {
+        open fun nodeExtraElems(elem: PsiElement): Triple<List<PsiElement>, List<PsiElement>, List<PsiElement>> {
+            val before = mutableListOf<PsiElement>()
+            var within = mutableListOf<PsiElement>()
+            var after = mutableListOf<PsiElement>()
+
+            // Before starts with all directly above ws/comments (reversed to be top-down)
+            before += elem.siblings(forward = false, withItself = false).takeWhile {
                 it is PsiWhiteSpace || it is PsiComment
-            }.toList()
-            val afterSibs = elem.siblings(forward = true, withItself = false).takeWhile {
-                it is PsiWhiteSpace || it is PsiComment
-            }.toList()
-            val childrenBefore = mutableListOf<PsiElement>()
-            val childrenAfter = mutableListOf<PsiElement>()
-            elem.allChildren.forEachIndexed { index, child ->
-                val valid = child is PsiWhiteSpace || child is PsiComment
-                if (valid && index == childrenBefore.size) childrenBefore += child
-                if (!valid && childrenAfter.isNotEmpty()) childrenAfter.clear()
-                else if (valid) childrenAfter += child
+            }.toList().reversed()
+
+            // Go over every child...
+            var seenInvalid = false
+            elem.allChildren.forEach { child ->
+                if (child is PsiWhiteSpace || child is PsiComment) {
+                    // If it's a ws/comment before anything else, it's a before
+                    if (!seenInvalid) before += child else {
+                        // Otherwise it's within or after
+                        within.add(child)
+                        after.add(child)
+                    }
+                } else {
+                    seenInvalid = true
+                    // Clear after since we've seen a non-ws node
+                    after.clear()
+                }
             }
-            return (beforeSibs + childrenBefore) to (childrenAfter + afterSibs)
+            // Within needs to have the after vals trimmed
+            within = within.subList(0, within.size - after.size)
+
+            // After includes all siblings before the first newline or all if there are only ws/comment siblings
+            var indexOfFirstNewline = -1
+            var seenNonWs = false
+            elem.siblings(forward = true, withItself = false).forEach {
+                if (it !is PsiWhiteSpace && it !is PsiComment) seenNonWs = true
+                else if (!seenNonWs) {
+                    if (indexOfFirstNewline == -1 && it is PsiWhiteSpace && it.textContains('\n'))
+                        indexOfFirstNewline = after.size
+                    after.add(it)
+                }
+            }
+            if (seenNonWs && indexOfFirstNewline != -1) after = after.subList(0, indexOfFirstNewline)
+
+            return Triple(before, within, after)
         }
 
         open fun convertExtras(elems: List<PsiElement>): List<Node.Extra> = elems.mapNotNull { elem ->
-            when (elem) {
+            // Ignore elems we've done before
+            val elemId = System.identityHashCode(elem)
+            if (!seenExtraPsiIdentities.add(elemId)) null else when (elem) {
                 is PsiWhiteSpace -> elem.text.count { it == '\n' }.let { newlineCount ->
                     if (newlineCount > 1) Node.Extra.BlankLines(newlineCount - 1).map(elem) else null
                 }
                 is PsiComment -> Node.Extra.Comment(
                     text = elem.text,
-                    startsLine = (elem.prevSibling as? PsiWhiteSpace)?.textContains('\n') == true,
+                    startsLine = ((elem.prevSibling ?: elem.prevLeaf()) as? PsiWhiteSpace)?.textContains('\n') == true,
                     endsLine = elem.tokenType == KtTokens.EOL_COMMENT ||
-                        (elem.nextSibling as? PsiWhiteSpace)?.textContains('\n') == true
+                        ((elem.nextSibling ?: elem.nextLeaf()) as? PsiWhiteSpace)?.textContains('\n') == true
                 )
                 else -> null
             }
