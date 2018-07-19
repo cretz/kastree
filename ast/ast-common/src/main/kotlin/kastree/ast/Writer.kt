@@ -1,6 +1,9 @@
 package kastree.ast
 
-open class Writer(val app: Appendable = StringBuilder()) : Visitor() {
+open class Writer(
+    val app: Appendable = StringBuilder(),
+    val extrasMap: ExtrasMap? = null // TODO: use this
+) : Visitor() {
 
     protected var indent = ""
 

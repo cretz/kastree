@@ -431,4 +431,15 @@ sealed class Node {
             TAILREC, OPERATOR, INFIX, INLINE, EXTERNAL, SUSPEND, CONST
         }
     }
+
+    sealed class Extra : Node() {
+        data class BlankLines(
+            val count: Int
+        ) : Extra()
+        data class Comment(
+            val text: String,
+            val startsLine: Boolean,
+            val endsLine: Boolean
+        ) : Extra()
+    }
 }
