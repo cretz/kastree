@@ -69,4 +69,12 @@ project(':ast-psi') {
         testCompile "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
         testCompile "org.jetbrains.kotlin:kotlin-test:$kotlin_version"
     }
+    test {
+        testLogging {
+            outputs.upToDateWhen {false}
+            showStandardStreams = true
+            exceptionFormat = 'full'
+            events 'passed', 'skipped', 'failed'
+        }
+    }
 }

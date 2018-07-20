@@ -36,7 +36,7 @@ open class Writer(
 
     fun write(v: Node) { visit(v, v) }
 
-    override fun <T : Node?> visit(v: T, parent: Node) {
+    override fun visit(v: Node?, parent: Node) {
         v?.writeExtrasBefore()
         v?.apply {
             when (this) {
@@ -408,7 +408,7 @@ open class Writer(
             }
         }
         v?.writeExtrasAfter()
-        v?.also { elemsSinceLastLine += it as Node }
+        v?.also { elemsSinceLastLine += it }
     }
 
     protected open fun Node.writeExtrasBefore() {
