@@ -11,6 +11,9 @@ buildscript {
 }
 
 allprojects {
+    group 'com.github.cretz.kastree'
+    version '0.1.0'
+
     repositories {
         mavenCentral()
     }
@@ -24,6 +27,7 @@ project(':ast:ast-common') {
         testCompile "org.jetbrains.kotlin:kotlin-test-annotations-common:$kotlin_version"
         testCompile "org.jetbrains.kotlin:kotlin-test-common:$kotlin_version"
     }
+    publishSettings(project, 'kastree-ast-common', 'Common library for Kastree AST')
 }
 
 project(':ast:ast-jvm') {
@@ -50,6 +54,7 @@ project(':ast:ast-jvm') {
             events 'passed', 'skipped', 'failed'
         }
     }
+    publishSettings(project, 'kastree-ast-jvm', 'JVM library for Kastree AST')
 }
 
 project(':ast-psi') {
@@ -75,6 +80,78 @@ project(':ast-psi') {
             showStandardStreams = true
             exceptionFormat = 'full'
             events 'passed', 'skipped', 'failed'
+        }
+    }
+    publishSettings(project, 'kastree-ast-psi', 'JVM library Kastree parsing')
+}
+
+def publishSettings(project, projectName, projectDescription) {
+    project.with {
+        if (!project.hasProperty('ossrhUsername')) return
+        apply plugin: 'maven'
+        apply plugin: 'signing'
+
+        archivesBaseName = projectName
+
+        task packageSources(type: Jar) {
+            classifier = 'sources'
+            from sourceSets.main.allSource
+            if (project.name.endsWith('-jvm') || project.name.endsWith('-js')) {
+                duplicatesStrategy = 'exclude'
+                def commonProject = project.parent.subprojects.find { it.name.endsWith('-common') }
+                from(sourceSets.main.allSource + commonProject.sourceSets.main.allSource)
+            }
+        }
+
+        task packageJavadoc(type: Jar) {
+            // Empty to satisfy Sonatype's javadoc.jar requirement
+            classifier 'javadoc'
+        }
+
+        artifacts {
+            archives packageSources, packageJavadoc
+        }
+
+        signing {
+            sign configurations.archives
+        }
+
+        uploadArchives {
+            repositories {
+                mavenDeployer {
+                    beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+                    repository(url: 'https://oss.sonatype.org/service/local/staging/deploy/maven2/') {
+                        authentication(userName: ossrhUsername, password: ossrhPassword)
+                    }
+                    snapshotRepository(url: 'https://oss.sonatype.org/content/repositories/snapshots/') {
+                        authentication(userName: ossrhUsername, password: ossrhPassword)
+                    }
+                    pom.project {
+                        name projectName
+                        packaging 'jar'
+                        description projectDescription
+                        url 'https://github.com/cretz/kastree'
+                        scm {
+                            connection 'scm:git:git@github.com:cretz/kastree.git'
+                            developerConnection 'scm:git:git@github.com:cretz/kastree.git'
+                            url 'git@github.com:cretz/kastree.git'
+                        }
+                        licenses {
+                            license {
+                                name 'MIT License'
+                                url 'https://opensource.org/licenses/MIT'
+                            }
+                        }
+                        developers {
+                            developer {
+                                id 'cretz'
+                                name 'Chad Retz'
+                                url 'https://github.com/cretz'
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
