@@ -73,6 +73,8 @@ open class Converter {
         AnnotationUseSiteTarget.PROPERTY_DELEGATE_FIELD -> Node.Modifier.AnnotationSet.Target.DELEGATE
     }
 
+    open fun convertAnonFunc(v: KtNamedFunction) = Node.Expr.AnonFunc(convertFunc(v))
+
     open fun convertArrayAccess(v: KtArrayAccessExpression) = Node.Expr.ArrayAccess(
         expr = convertExpr(v.arrayExpression ?: error("No array expr for $v")),
         indices = v.indexExpressions.map(::convertExpr)
@@ -276,8 +278,7 @@ open class Converter {
         is KtAnnotatedExpression -> convertAnnotated(v)
         is KtCallExpression -> convertCall(v)
         is KtArrayAccessExpression -> convertArrayAccess(v)
-        // TODO: this is for "function expressions", need to learn about them
-        is KtNamedFunction -> throw Unsupported("Function expressions not supported")
+        is KtNamedFunction -> convertAnonFunc(v)
         // TODO: this can happen when a labeled expression uses a var decl as the expression
         is KtProperty -> throw Unsupported("Property expressions not supported")
         // TODO: this is present in a recovery test where an interface decl is on rhs of a gt expr
@@ -304,9 +305,7 @@ open class Converter {
         typeParams =
             if (v.hasTypeParameterListBeforeFunctionName()) v.typeParameters.map(::convertTypeParam) else emptyList(),
         receiverType = v.receiverTypeReference?.let(::convertType),
-        // TODO: this is apparently allowed by the parser
-        name = v.name ?: throw Unsupported("Functions without names are not supported"),
-        // TODO: validate
+        name = v.name,
         paramTypeParams =
             if (!v.hasTypeParameterListBeforeFunctionName()) v.typeParameters.map(::convertTypeParam) else emptyList(),
         params = v.valueParameters.map(::convertFuncParam),
@@ -323,7 +322,7 @@ open class Converter {
         mods = convertModifiers(v),
         readOnly = if (v.hasValOrVar()) !v.isMutable else null,
         name = v.name ?: error("No param name"),
-        type = convertType(v.typeReference ?: throw Unsupported("Function parameters without types not supported")),
+        type = v.typeReference?.let(::convertType),
         default = v.defaultValue?.let(::convertExpr)
     ).map(v)
 

@@ -284,6 +284,9 @@ open class MutableVisitor {
                         expr = visitChildren(expr, newCh),
                         indices = visitChildren(indices, newCh)
                     )
+                    is Node.Expr.AnonFunc -> copy(
+                        func = visitChildren(func, newCh)
+                    )
                     is Node.Block -> copy(
                         stmts = visitChildren(stmts, newCh)
                     )

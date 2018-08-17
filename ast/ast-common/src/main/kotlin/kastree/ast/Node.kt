@@ -80,7 +80,8 @@ sealed class Node {
             override val mods: List<Modifier>,
             val typeParams: List<TypeParam>,
             val receiverType: Type?,
-            val name: String,
+            // Name not present on anonymous functions
+            val name: String?,
             val paramTypeParams: List<TypeParam>,
             val params: List<Func.Param>,
             val type: Type?,
@@ -91,7 +92,8 @@ sealed class Node {
                 override val mods: List<Modifier>,
                 val readOnly: Boolean?,
                 val name: String,
-                val type: Type,
+                // Type can be null for anon functions
+                val type: Type?,
                 val default: Expr?
             ) : Node(), WithModifiers
             sealed class Body : Node() {
@@ -401,6 +403,9 @@ sealed class Node {
         data class ArrayAccess(
             val expr: Expr,
             val indices: List<Expr>
+        ) : Expr()
+        data class AnonFunc(
+            val func: Decl.Func
         ) : Expr()
     }
 

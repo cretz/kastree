@@ -107,10 +107,11 @@ open class Writer(
                 is Node.Decl.Init ->
                     append("init ").also { children(block) }
                 is Node.Decl.Func -> {
-                    childMods().append("fun ")
+                    childMods().append("fun")
+                    if (name != null || typeParams.isNotEmpty() || receiverType != null) append(' ')
                     bracketedChildren(typeParams, " ")
                     if (receiverType != null) children(receiverType).append(".")
-                    appendName(name)
+                    name?.also { appendName(it) }
                     bracketedChildren(paramTypeParams)
                     parenChildren(params)
                     if (type != null) append(": ").also { children(type) }
@@ -120,7 +121,8 @@ open class Writer(
                 is Node.Decl.Func.Param -> {
                     if (mods.isNotEmpty()) childMods(newlines = false).append(' ')
                     if (readOnly == true) append("val ") else if (readOnly == false) append("var ")
-                    appendName(name).append(": ").also { children(type) }
+                    appendName(name)
+                    if (type != null) append(": ").also { children(type) }
                     if (default != null) append(" = ").also { children(default) }
                 }
                 is Node.Decl.Func.Body.Block ->
@@ -378,6 +380,8 @@ open class Writer(
                     children(expr)
                     children(indices, ", ", "[", "]")
                 }
+                is Node.Expr.AnonFunc ->
+                    children(func)
                 is Node.Block -> {
                     // Special case, no braces if the parent is a brace
                     if (parent is Node.Expr.Brace) {

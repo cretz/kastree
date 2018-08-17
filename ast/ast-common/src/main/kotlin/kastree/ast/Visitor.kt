@@ -280,6 +280,9 @@ open class Visitor {
                 visitChildren(expr)
                 visitChildren(indices)
             }
+            is Node.Expr.AnonFunc -> {
+                visitChildren(func)
+            }
             is Node.Block -> {
                 visitChildren(stmts)
             }
