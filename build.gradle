@@ -69,7 +69,7 @@ project(':ast-psi') {
     dependencies {
         compile project(':ast:ast-jvm')
         compile 'org.jetbrains.kotlin:kotlin-stdlib-jdk8'
-        compile "org.jetbrains.kotlin:kotlin-compiler:$kotlin_version"
+        compile "org.jetbrains.kotlin:kotlin-compiler-embeddable:$kotlin_version"
         testCompile 'junit:junit:4.12'
         testCompile "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
         testCompile "org.jetbrains.kotlin:kotlin-test:$kotlin_version"
