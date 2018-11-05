@@ -1,9 +1,9 @@
 package kastree.ast.psi
 
-import com.intellij.openapi.util.text.StringUtilRt
-import com.intellij.psi.PsiElement
 import kastree.ast.Node
 import kastree.ast.Writer
+import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtilRt
+import org.jetbrains.kotlin.com.intellij.psi.PsiElement
 import org.junit.Assume
 import org.junit.Test
 import org.junit.runner.RunWith
