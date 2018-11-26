@@ -12,7 +12,7 @@ buildscript {
 
 allprojects {
     group 'com.github.cretz.kastree'
-    version '0.2.0-SNAPSHOT'
+    version '0.2.0'
 
     repositories {
         mavenCentral()
