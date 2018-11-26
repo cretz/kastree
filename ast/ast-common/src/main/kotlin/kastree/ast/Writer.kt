@@ -382,6 +382,8 @@ open class Writer(
                 }
                 is Node.Expr.AnonFunc ->
                     children(func)
+                is Node.Expr.Property ->
+                    children(decl)
                 is Node.Block -> {
                     // Special case, no braces if the parent is a brace
                     if (parent is Node.Expr.Brace) {

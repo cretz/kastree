@@ -279,8 +279,8 @@ open class Converter {
         is KtCallExpression -> convertCall(v)
         is KtArrayAccessExpression -> convertArrayAccess(v)
         is KtNamedFunction -> convertAnonFunc(v)
-        // TODO: this can happen when a labeled expression uses a var decl as the expression
-        is KtProperty -> throw Unsupported("Property expressions not supported")
+        is KtProperty -> convertPropertyExpr(v)
+        is KtDestructuringDeclaration -> convertPropertyExpr(v)
         // TODO: this is present in a recovery test where an interface decl is on rhs of a gt expr
         is KtClass -> throw Unsupported("Class expressions not supported")
         else -> error("Unrecognized expression type from $v")
@@ -449,6 +449,14 @@ open class Converter {
             paramType = v.parameter?.typeReference?.let(::convertType),
             body = v.bodyExpression?.let(::convertFuncBody)
         ).map(v)
+
+    open fun convertPropertyExpr(v: KtDestructuringDeclaration) = Node.Expr.Property(
+        decl = convertProperty(v)
+    ).map(v)
+
+    open fun convertPropertyExpr(v: KtProperty) = Node.Expr.Property(
+        decl = convertProperty(v)
+    ).map(v)
 
     open fun convertPropertyVar(v: KtDestructuringDeclarationEntry) =
         if (v.name == "_") null else Node.Decl.Property.Var(

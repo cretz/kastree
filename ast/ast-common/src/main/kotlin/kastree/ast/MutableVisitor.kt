@@ -287,6 +287,9 @@ open class MutableVisitor {
                     is Node.Expr.AnonFunc -> copy(
                         func = visitChildren(func, newCh)
                     )
+                    is Node.Expr.Property -> copy(
+                        decl = visitChildren(decl, newCh)
+                    )
                     is Node.Block -> copy(
                         stmts = visitChildren(stmts, newCh)
                     )

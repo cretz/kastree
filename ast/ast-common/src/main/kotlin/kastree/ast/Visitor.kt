@@ -283,6 +283,9 @@ open class Visitor {
             is Node.Expr.AnonFunc -> {
                 visitChildren(func)
             }
+            is Node.Expr.Property ->  {
+                visitChildren(decl)
+            }
             is Node.Block -> {
                 visitChildren(stmts)
             }

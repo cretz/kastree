@@ -407,6 +407,10 @@ sealed class Node {
         data class AnonFunc(
             val func: Decl.Func
         ) : Expr()
+        // This is only present for when expressions and labeled expressions
+        data class Property(
+            val decl: Decl.Property
+        ) : Expr()
     }
 
     data class Block(val stmts: List<Stmt>) : Node()
