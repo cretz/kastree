@@ -257,7 +257,7 @@ sealed class Node {
                 IN("in"), NOT_IN("!in"),
                 GT(">"), GTE(">="), LT("<"), LTE("<="),
                 EQ("=="), NEQ("!="),
-                ASSN("="), MUL_ASSN("*="), DIV_ASSN("/="), MOD_ASSN("%="), ADD_ASSN("+="), SUB_ASSN("+="),
+                ASSN("="), MUL_ASSN("*="), DIV_ASSN("/="), MOD_ASSN("%="), ADD_ASSN("+="), SUB_ASSN("-="),
                 OR("||"), AND("&&"), ELVIS("?:"), RANGE(".."),
                 DOT("."), DOT_SAFE("?."), SAFE("?")
             }
