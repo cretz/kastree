@@ -462,7 +462,9 @@ open class Writer(
     }
 
     protected fun Node.childVars(vars: List<Node.Decl.Property.Var?>) =
-        if (vars.size == 1) children(vars) else {
+        if (vars.size == 1) {
+            if (vars.single() == null) append('_') else children(vars)
+        } else {
             append('(')
             vars.forEachIndexed { index, v ->
                 if (v == null) append('_') else children(v)

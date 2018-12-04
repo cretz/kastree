@@ -465,10 +465,12 @@ open class Converter {
         ).map(v)
 
     open fun convertPropertyVars(v: KtParameter) =
-        v.destructuringDeclaration?.entries?.map(::convertPropertyVar) ?: listOf(Node.Decl.Property.Var(
-            name = v.name ?: error("No property name on $v"),
-            type = v.typeReference?.let(::convertType)
-        ).map(v))
+        v.destructuringDeclaration?.entries?.map(::convertPropertyVar) ?: listOf(
+            if (v.name == "_") null else Node.Decl.Property.Var(
+                name = v.name ?: error("No property name on $v"),
+                type = v.typeReference?.let(::convertType)
+            ).map(v)
+        )
 
     open fun convertReturn(v: KtReturnExpression) = Node.Expr.Return(
         label = v.getLabelName(),
