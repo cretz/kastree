@@ -599,8 +599,11 @@ open class Writer(
         }
 
     // We accept lots of false positives to be simple and not have to bring in JVM dep to do accurate check
-    protected val String.shouldEscapeIdent get() = KEYWORDS.contains(this) || first() in '0'..'9' ||
-        any { it !in 'a'..'z' && it !in 'A'..'Z' && it !in '0'..'9' }
+    protected val String.shouldEscapeIdent get() =
+        KEYWORDS.contains(this) ||
+        all { it == '_' } ||
+        first() in '0'..'9' ||
+        any { it !in 'a'..'z' && it !in 'A'..'Z' && it !in '0'..'9' && it != '_' }
 
     companion object {
         protected val KEYWORDS = setOf(
