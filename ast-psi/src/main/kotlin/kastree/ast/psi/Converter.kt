@@ -790,7 +790,7 @@ open class Converter {
                     startsLine = ((elem.prevSibling ?: elem.prevLeaf()) as? PsiWhiteSpace)?.textContains('\n') == true,
                     endsLine = elem.tokenType == KtTokens.EOL_COMMENT ||
                         ((elem.nextSibling ?: elem.nextLeaf()) as? PsiWhiteSpace)?.textContains('\n') == true
-                )
+                ).map(elem)
                 else -> null
             }
         }
