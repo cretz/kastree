@@ -211,7 +211,7 @@ open class Writer(
                 is Node.TypeRef.Simple.Piece ->
                     appendName(name).also { bracketedChildren(typeParams) }
                 is Node.TypeRef.Nullable ->
-                    children(type).append('?')
+                    (if (type is Node.TypeRef.Func) parenChildren(listOf(type)) else children(type)).append('?')
                 is Node.TypeRef.Dynamic ->
                     append("dynamic")
                 is Node.Type ->
