@@ -347,7 +347,9 @@ open class Converter {
         expr = convertExpr(v.baseExpression ?: error("No label expr for $v"))
     ).map(v)
 
-    open fun convertModifiers(v: KtModifierListOwner) = v.modifierList?.node?.children()?.mapNotNull { node ->
+    open fun convertModifiers(v: KtModifierListOwner) = convertModifiers(v.modifierList)
+
+    open fun convertModifiers(v: KtModifierList?) = v?.node?.children().orEmpty().mapNotNull { node ->
         // We go over the node children because we want to preserve order
         node.psi.let {
             when (it) {
@@ -366,7 +368,7 @@ open class Converter {
                 }
             }
         }
-    }?.toList() ?: emptyList()
+    }.toList()
 
     open fun convertName(v: KtSimpleNameExpression) = Node.Expr.Name(
         name = v.getReferencedName()
@@ -634,7 +636,12 @@ open class Converter {
             }
         ).map(v)
         is KtNullableType -> Node.TypeRef.Nullable(
-            type = convertTypeRef(v.innerType ?: error("No inner type for nullable"))
+            // If there are modifiers or the inner type is a function, the type is a paren
+            type = convertModifiers(v.modifierList).let { mods ->
+                val innerType = convertTypeRef(v.innerType ?: error("No inner type for nullable"))
+                if (v.innerType !is KtFunctionType && mods.isEmpty()) innerType
+                else Node.TypeRef.Paren(mods, convertTypeRef(v.innerType!!))
+            }
         ).map(v)
         is KtDynamicType -> Node.TypeRef.Dynamic().map(v)
         else -> error("Unrecognized type of $v")
