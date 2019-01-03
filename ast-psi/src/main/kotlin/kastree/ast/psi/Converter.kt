@@ -600,7 +600,7 @@ open class Converter {
     open fun convertTypeParam(v: KtTypeParameter) = Node.TypeParam(
         mods = convertModifiers(v),
         name = v.name ?: error("No type param name for $v"),
-        type = v.extendsBound?.let(::convertTypeRef) as? Node.TypeRef.Simple
+        type = v.extendsBound?.let(::convertTypeRef)
     ).map(v)
 
     open fun convertTypeParams(v: KtTypeArgumentList?) = v?.arguments?.map {

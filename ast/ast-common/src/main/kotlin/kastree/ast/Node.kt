@@ -165,7 +165,7 @@ sealed class Node {
     data class TypeParam(
         override val mods: List<Modifier>,
         val name: String,
-        val type: TypeRef.Simple?
+        val type: TypeRef?
     ) : Node(), WithModifiers
 
     data class TypeConstraint(
