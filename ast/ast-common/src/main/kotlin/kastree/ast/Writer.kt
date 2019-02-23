@@ -292,7 +292,13 @@ open class Writer(
                 is Node.Expr.StringTmpl.Elem.UnicodeEsc ->
                     append("\\u").append(digits)
                 is Node.Expr.StringTmpl.Elem.RegularEsc ->
-                    append('\\').append(char)
+                    append('\\').append(when (char) {
+                        '\b' -> 'b'
+                        '\n' -> 'n'
+                        '\t' -> 't'
+                        '\r' -> 'r'
+                        else -> char
+                    })
                 is Node.Expr.StringTmpl.Elem.LongTmpl ->
                     append("\${").also { children(expr) }.append('}')
                 is Node.Expr.Const ->
