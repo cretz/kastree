@@ -93,7 +93,6 @@ open class Writer(
                 }
                 is Node.Decl.Structured.Parent.CallConstructor -> {
                     children(type)
-                    bracketedChildren(typeArgs)
                     parenChildren(args)
                 }
                 is Node.Decl.Structured.Parent.Type -> {
