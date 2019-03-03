@@ -553,7 +553,13 @@ open class Converter {
         block = convertBlock(v.catchBody as? KtBlockExpression ?: error("No catch block for $v"))
     ).map(v)
 
-    open fun convertType(v: KtTypeProjection) = v.typeReference?.let { convertType(it) }
+    open fun convertType(v: KtTypeProjection) =
+        v.typeReference?.let { convertType(it, v.modifierList) }
+
+    open fun convertType(v: KtTypeReference, modifierList: KtModifierList?): Node.Type = Node.Type(
+        mods = convertModifiers(modifierList),
+        ref = convertTypeRef(v)
+    ).map(v)
 
     open fun convertType(v: KtTypeReference): Node.Type = Node.Type(
         // Paren modifiers are inside the ref...
