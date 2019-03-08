@@ -29,6 +29,23 @@ class WriterTest {
     }
 
     fun assertParseAndWriteExact(code: String) {
-        assertEquals(code.trim(), Writer.write(Parser.parseFile(code)).trim())
+
+        val node = Parser.parseFile(code)
+        val identityNode = MutableVisitor.preVisit(node) { v, _ -> v }
+
+        assertEquals(node, identityNode, "Different values for identity-transformed node and original node")
+
+        assertEquals(
+            code.trim(),
+            Writer.write(node).trim(),
+            "Parse -> Write for $code, not equal")
+
+        assertEquals(
+            code.trim(),
+            Writer.write(identityNode).trim(),
+            "Parse -> Identity Transform -> Write for $code, failed")
+
+
     }
+
 }
