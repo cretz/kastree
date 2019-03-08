@@ -28,12 +28,15 @@ class WriterTest {
         assertParseAndWriteExact("private object SubnetSorter : DefaultSorter<Subnet>()")
     }
 
+    @Test
+    fun testOpType() {
+        assertParseAndWriteExact("""val x = "" as String""")
+    }
+
     fun assertParseAndWriteExact(code: String) {
 
         val node = Parser.parseFile(code)
         val identityNode = MutableVisitor.preVisit(node) { v, _ -> v }
-
-        assertEquals(node, identityNode, "Different values for identity-transformed node and original node")
 
         assertEquals(
             code.trim(),

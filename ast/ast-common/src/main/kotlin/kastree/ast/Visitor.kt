@@ -181,6 +181,12 @@ open class Visitor {
                 visitChildren(oper)
                 visitChildren(rhs)
             }
+            is Node.Expr.TypeOp.Oper -> {}
+            is Node.Expr.TypeOp -> {
+                visitChildren(lhs)
+                visitChildren(oper)
+                visitChildren(rhs)
+            }
             is Node.Expr.BinaryOp.Oper.Infix -> {}
             is Node.Expr.BinaryOp.Oper.Token -> {}
             is Node.Expr.UnaryOp -> {
