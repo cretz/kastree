@@ -281,6 +281,7 @@ open class Converter {
         is KtNamedFunction -> convertAnonFunc(v)
         is KtProperty -> convertPropertyExpr(v)
         is KtDestructuringDeclaration -> convertPropertyExpr(v)
+        is KtScriptInitializer -> convertScriptInitializer(v)
         // TODO: this is present in a recovery test where an interface decl is on rhs of a gt expr
         is KtClass -> throw Unsupported("Class expressions not supported")
         else -> error("Unrecognized expression type from $v")
@@ -699,6 +700,10 @@ open class Converter {
         body = convertExpr(v.body ?: error("No while body for $v")),
         doWhile = v is KtDoWhileExpression
     ).map(v)
+
+    open fun convertScriptInitializer(v: KtScriptInitializer) = Node.Expr.ScriptInitializer(
+        body = convertExpr(v.body ?: error("No body for $v"))
+    )
 
     protected open fun <T: Node> T.map(v: PsiElement) = also { onNode(it, v) }
 
