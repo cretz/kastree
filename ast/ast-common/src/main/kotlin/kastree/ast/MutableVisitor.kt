@@ -270,6 +270,12 @@ open class MutableVisitor {
                         anns = visitChildren(anns, newCh),
                         expr = visitChildren(expr, newCh)
                     )
+                    is Node.Expr.TypeOp -> copy (
+                        lhs = visitChildren(lhs, newCh),
+                        oper = visitChildren(oper, newCh),
+                        rhs = visitChildren(rhs, newCh)
+                    )
+                    is Node.Expr.TypeOp.Oper -> this
                     is Node.Expr.Call -> copy(
                         expr = visitChildren(expr, newCh),
                         typeArgs = visitChildren(typeArgs, newCh),
