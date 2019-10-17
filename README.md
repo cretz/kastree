@@ -1,3 +1,8 @@
+# Note
+
+Kastree is currently not being actively developed.
+
+Another kotlin AST parsing library is [kotlinx.ast](https://github.com/kotlinx/ast)
 # Kastree
 
 Kastree is a simple library to manipulate Kotlin source code as a set of AST objects. Features:
