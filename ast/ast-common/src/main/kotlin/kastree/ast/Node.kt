@@ -407,6 +407,9 @@ sealed class Node {
         data class AnonFunc(
             val func: Decl.Func
         ) : Expr()
+        data class ScriptInitializer(
+            val body: Expr
+        ): Expr()
         // This is only present for when expressions and labeled expressions
         data class Property(
             val decl: Decl.Property
