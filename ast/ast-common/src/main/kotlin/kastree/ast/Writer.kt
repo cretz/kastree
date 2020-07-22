@@ -47,7 +47,7 @@ open class Writer(
                     childrenLines(decls, extraMidLines = 1)
                 }
                 is Node.Package ->
-                    childMods().append("package ").appendNames(names, ".")
+                    childMods().append("package ").appendNames(names, ".").append('\n')
                 is Node.Import -> {
                     append("import ").appendNames(names, ".")
                     if (wildcard) append(".*") else if (alias != null) append(" as ").appendName(alias)
