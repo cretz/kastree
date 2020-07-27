@@ -100,7 +100,7 @@ open class Writer(
                     if (by != null) append(" by ").also { children(by) }
                 }
                 is Node.Decl.Structured.PrimaryConstructor -> {
-                    if (mods.isNotEmpty()) append(" ").also { childMods(newlines = false).append("constructor") }
+					if (mods.isNotEmpty()) lineEnd().lineBegin().also { childMods(newlines = false).append("constructor") }
                     if(params.size >= 2){
 						parenChildrenWithNewLine(params)
 					}else{
