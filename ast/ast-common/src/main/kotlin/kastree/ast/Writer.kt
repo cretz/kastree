@@ -444,23 +444,23 @@ open class Writer(
         })
     }
 
-    protected open fun Node.writeExtras(extras: List<Node.Extra>) {
-        extras.forEach {
-            when (it) {
-                is Node.Extra.BlankLines -> {
-                    (2..it.count).forEach { line() }
-                    lineEnd().lineBegin()
-                }
-                is Node.Extra.Comment -> {
-                    if (it.startsLine && it.endsLine) lineEnd(it.text).lineBegin() else {
-                        if (!it.startsLine) append(' ')
-                        append(it.text)
-                        if (!it.endsLine) append(' ')
-                    }
-                }
-            }
-        }
-    }
+	protected open fun Node.writeExtras(extras: List<Node.Extra>) {
+		extras.forEach {
+			when (it) {
+				is Node.Extra.BlankLines -> {
+					(2..it.count).forEach { line() }
+					lineEnd().lineBegin()
+				}
+				is Node.Extra.Comment -> {
+					if (it.startsLine && it.endsLine) lineEnd(it.text).lineBegin() else {
+						//if (!it.startsLine) append(' ')
+						append(it.text)
+						if (!it.endsLine) append(' ') else append('\n')
+					}
+				}
+			}
+		}
+	}
 
     protected fun Node.childTypeConstraints(v: List<Node.TypeConstraint>) = this@Writer.also {
         if (v.isNotEmpty()) append(" where ").also { children(v, ", ") }
