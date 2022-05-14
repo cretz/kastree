@@ -1,5 +1,7 @@
 package kastree.ast.psi
 
+import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
+import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
@@ -15,7 +17,9 @@ open class Parser(val converter: Converter = Converter) {
     protected val proj by lazy {
         KotlinCoreEnvironment.createForProduction(
             Disposer.newDisposable(),
-            CompilerConfiguration(),
+            CompilerConfiguration().apply {
+                put(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.NONE)
+            },
             EnvironmentConfigFiles.JVM_CONFIG_FILES
         ).project
     }
